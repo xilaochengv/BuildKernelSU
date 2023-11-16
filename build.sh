@@ -206,11 +206,12 @@ echo "你想使用哪种方式加入 KernelSU 到内核中？"
 echo "3.不作任何修改直接编译（第一次编译建议先用此选项进行尝试，如果编译成功并能正常开机后再加入 KernelSU 进行重新编译）"
 [ -f retry ] && echo "4.上一次编译可能各种原因中断，接回上一次编译进度继续编译（选这个确认是否每次都在同一个位置出错）"
 [ -f BUILD_KERNEL_COMPLETE -a -f Need_KernelSU ] && echo "5.编译完成并 KernelSU 已能正常使用，但手机重启后应用授权列表会丢失，选这里尝试使用修复方案"
-echo "6.已编译完成，仅修改内核包名进行打包操作"
+[ -d KernelSU -a -f Need_KernelSU ] && echo "6.已手动修改完 KernelSU 代码，直接编译（跳过下载 KernelSU 源码步骤，需要手动修改代码修复问题时选这个）"
+echo "7.已编译完成，仅修改内核包名进行打包操作"
 echo "0.退出本次编译"
 echo "================================================================================"
 
-while [[ "$num" != [0-6] ]];do
+while [[ "$num" != [0-7] ]];do
 	read -p "请输入正确的数字 > " num
 	case "$num" in
 	1)
@@ -226,6 +227,9 @@ while [[ "$num" != [0-6] ]];do
 		;;
 	5)
 		[ ! -f BUILD_KERNEL_COMPLETE -o ! -f Need_KernelSU ] && num=""
+		;;
+	6)
+		[ ! -d KernelSU -o ! -f Need_KernelSU ] && num=""
 		;;
 	0)
 		echo "================================================================================"
@@ -272,22 +276,6 @@ done
 	[ -f fs/open.c.backup ] && mv -f fs/open.c.backup fs/open.c
 	[ -f fs/stat.c.backup ] && mv -f fs/stat.c.backup fs/stat.c
 	[ -f drivers/input/input.c.backup ] && mv -f drivers/input/input.c.backup drivers/input/input.c
-	[ -d out ] && {
-	#	echo "================================================================================"
-	#	echo "检测到有上一次编译留下的文件，可能会影响编译结果，是否删除？" && del=""
-	#	echo "1.确认删除"
-	#	echo "0.跳过，继续编译"
-	#	echo "================================================================================"
-	#	while [[ "$del" != [0-1] ]];do
-	#		read -p "请输入正确的数字 > " del
-	#		[ "$del" = 1 ] && {
-				rm -rf out
-				echo "================================================================================"
-				echo " 文件夹 $BULID_KERNEL_DIR/$KERNEL_NAME-$KERNEL_SOURCE_BRANCH/out 已删除"
-				echo "================================================================================" && read -t 1
-	#		}
-	#	done
-	}
 }
 
 [[ "$num" = [1-2] ]] && {
@@ -471,14 +459,33 @@ EOF
 	sed -i 's/LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)/1/' KernelSU/kernel/core_hook.c KernelSU/kernel/kernel_compat.c KernelSU/kernel/kernel_compat.h
 }
 
-[ "$num" != 6 ] && {
-	export SUBARCH=$ARCH && touch retry
+[[ "$num" = [1-3,5-6] ]] && {
+	[ -d out ] && {
+	#	echo "================================================================================"
+	#	echo "检测到有上一次编译留下的文件，可能会影响编译结果，是否删除？" && del=""
+	#	echo "1.确认删除"
+	#	echo "0.跳过，继续编译"
+	#	echo "================================================================================"
+	#	while [[ "$del" != [0-1] ]];do
+	#		read -p "请输入正确的数字 > " del
+	#		[ "$del" = 1 ] && {
+				rm -rf out
+				echo "================================================================================"
+				echo " 文件夹 $BULID_KERNEL_DIR/$KERNEL_NAME-$KERNEL_SOURCE_BRANCH/out 已删除"
+				echo "================================================================================" && read -t 1
+	#		}
+	#	done
+	}
+}
+
+[ "$num" != 7 ] && {
+	export SUBARCH=$ARCH
 	export PATH=$CLANG_DIR:$PATH
 	[ -n "$GCC64_DIR" ] && export PATH=$GCC64_DIR:$PATH
 	[ -n "$GCC32_DIR" ] && export PATH=$GCC32_DIR:$PATH
 	[ -f BUILD_KERNEL_COMPLETE ] && rm -f BUILD_KERNEL_COMPLETE
 	[ "$num" != 4 ] && make -j$(nproc --all) O=out $BUILDKERNEL_CMDS $KERNEL_CONFIG
-	num="";make -j$(nproc --all) O=out $BUILDKERNEL_CMDS
+	touch retry && num="";make -j$(nproc --all) O=out $BUILDKERNEL_CMDS
 	if [ "$?" = 0 ];then
 		[ -d KernelSU -a -f Need_KernelSU ] && touch BUILD_KERNEL_COMPLETE
 		echo "================================================================================"
@@ -498,7 +505,7 @@ EOF
 		echo "本次编译使用指令：make -j$(nproc --all) O=out $(echo $BUILDKERNEL_CMDS | sed ':i;N;s/\n/ /;ti')"
 		echo "================================================================================"
 		echo "编译成功！将进行 boot.img 文件重新打包"
-		echo "================================================================================" && num=6 && rm -f retry && read -t 3
+		echo "================================================================================" && num=7 && rm -f retry && read -t 3
 	else
 		echo "================================================================================"
 		echo "内核仓库：$KERNEL_SOURCE"
@@ -525,7 +532,7 @@ EOF
 	fi;
 }
 
-[ "$num" = 6 ] && {
+[ "$num" = 7 ] && {
 	cd $BULID_KERNEL_DIR && KERNEL_IMAGE_NAME=""
 	while [ ! -f $KERNEL_NAME-$KERNEL_SOURCE_BRANCH/out/arch/$ARCH/boot/$KERNEL_IMAGE_NAME ];do
 		echo "================================================================================" && image=""
