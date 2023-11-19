@@ -396,7 +396,7 @@ EOF
 		ksu_handle_vfs_read(&file, &buf, &count, &pos);
 EOF
 		line=$(($(sed -n '/ssize_t vfs_read(struct file \*file, char __user \*buf, size_t count, loff_t \*pos)/=' fs/read_write.c)+3))
-		[ "$line" != -1 ] && sed -i ''$line'r add_sucode' fs/read_write.c
+		[ "$line" != 3 ] && sed -i ''$line'r add_sucode' fs/read_write.c
 	}
 	[ -n "$(grep '\* access() needs to use the real uid\/gid, not the effective uid\/gid.' fs/open.c)" ] && {
 		cat > add_sucode << EOF
@@ -404,13 +404,13 @@ extern int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int
 			 int *flags);
 EOF
 		line=$(($(sed -n '/\* access() needs to use the real uid\/gid, not the effective uid\/gid./=' fs/open.c)-2))
-		[ "$line" != -1 ] && sed -i ''$line'r add_sucode' fs/open.c
+		[ "$line" != -2 ] && sed -i ''$line'r add_sucode' fs/open.c
 		cat > add_sucode << EOF
 	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
 EOF
 		if [ -n "$(grep 'long do_faccessat(int dfd, const char __user \*filename, int mode)' fs/open.c)" ];then
 			line=$(($(sed -n '/long do_faccessat(int dfd, const char __user \*filename, int mode)/=' fs/open.c)+1))
-			[ "$line" != -1 ] && sed -i ''$line'r add_sucode' fs/open.c
+			[ "$line" != 1 ] && sed -i ''$line'r add_sucode' fs/open.c
 		elif [ -n "$(grep "if (mode & ~S_IRWXO)	/\* where's F_OK, X_OK, W_OK, R_OK? \*/" fs/open.c)" ];then
 			line=$(($(sed -n "/if (mode & ~S_IRWXO)	\/\* where's F_OK, X_OK, W_OK, R_OK? \*\//=" fs/open.c)-1))
 			[ "$line" != -1 ] && sed -i ''$line'r add_sucode' fs/open.c
@@ -424,12 +424,12 @@ EOF
 EOF
 	if [ -n "$(grep 'EXPORT_SYMBOL(vfs_statx_fd);' fs/stat.c)" ];then
 		line=$(($(sed -n '/EXPORT_SYMBOL(vfs_statx_fd);/=' fs/stat.c)+1))
-		[ "$line" != -1 ] && sed -i ''$line'r add_sucode' fs/stat.c
+		[ "$line" != 1 ] && sed -i ''$line'r add_sucode' fs/stat.c
 		line=$(($(sed -n '/if ((flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT |/=' fs/stat.c)-1))
 		[ "$line" != -1 ] && sed -i ''$line'r add_sucode2' fs/stat.c
 	elif [ -n "$(grep 'EXPORT_SYMBOL(vfs_fstat);') fs/stat.c" ];then
 		line=$(($(sed -n '/EXPORT_SYMBOL(vfs_fstat);/=' fs/stat.c)+1))
-		[ "$line" != -1 ] && sed -i ''$line'r add_sucode' fs/stat.c
+		[ "$line" != 1 ] && sed -i ''$line'r add_sucode' fs/stat.c
 		line=$(($(sed -n '/if ((flag & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT |/=' fs/stat.c)-1))
 		[ "$line" != -1 ] && sed -i ''$line'r add_sucode2' fs/stat.c
 	fi
@@ -446,7 +446,7 @@ EOF
 		ksu_handle_input_handle_event(&type, &code, &value);
 EOF
 		line=$(($(sed -n '/static void input_handle_event(struct input_dev \*dev,/=' drivers/input/input.c)+3))
-		[ "$line" != -1 ] && sed -i ''$line'r add_sucode' drivers/input/input.c
+		[ "$line" != 3 ] && sed -i ''$line'r add_sucode' drivers/input/input.c
 	}
 	rm -f add_sucode add_sucode2
 }
