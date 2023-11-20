@@ -304,8 +304,8 @@ done
 			echo "================================================================================" && return 2> /dev/null || exit
 		}
 		cd KernelSU;git checkout "$(git describe --abbrev=0 --tags)" &> /dev/null
-		SUVERSION="$SUVERSION：$(grep $(cat .git/HEAD) .git/packed-refs | awk -F '/' {'print $3'} | tail -n1)"
-	fi;cd ..
+		SUVERSION="$SUVERSION：$(grep $(cat .git/HEAD) .git/packed-refs | awk -F '/' {'print $3'} | tail -n1)";cd ..
+	fi;
 	if [ -d /common/drivers ];then
 		ln -sf ../../KernelSU/kernel drivers/common/kernelsu
 		grep -q kernelsu drivers/common/Makefile || echo "obj-\$(CONFIG_KSU)		+= kernelsu/" >> drivers/common/Makefile
