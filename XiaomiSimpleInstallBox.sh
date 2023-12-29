@@ -787,6 +787,7 @@ main(){
 	echo -e "\n5. $RED更新或下载$RESET并$GREEN启动$RESET${YELLOW}VSFTP$RESET（FTP 服务器搭建神器）"
 	echo -e "\n6. $RED更新或下载$RESET并$GREEN启动$RESET${YELLOW}Transmission$RESET（PT 下载神器）"
 	echo -e "\n9. $YELLOW检查脚本更新$RESET"
+	echo -e "\n99. $YELLOW给作者打赏支持$RESET"
 	echo "---------------------------------------------------------"
 	echo -e "0. 退出$YELLOW小米路由器$GREEN简易安装插件脚本$RESET"
 	while [ -z "$num" ];do
@@ -814,13 +815,19 @@ main(){
 		9)
 			update_check
 			;;
+		99)
+			echo -e "\n$RED$BLINK十分感谢您的支持！！！！！！！！$RESET\n\n$YELLOW微信扫码：$RESET\n"
+			echo H4sIAAAAAAAAA71UwQ3DMAj8d4oblQcPJuiAmaRSHMMZYzcvS6hyXAPHcXB97Tpon5PJcj5cX2XDfS3wL2mW3i38FhkMwHNqoaSb9YP291p7rSInTCneDRugbLr0q7uhlbX7lkUwxxVsfctaMMW/2a87YPD01e+yGiF6onHq/MAvlFwGUO2AMW7VFwODFGolOMBToaU6d1UEAYwp+jtCN9dxdsppCr4Q4N0F5EbiEiKS/P5MRupGKMGIFp4Jv8jv1lzNyiLMg3QcEc03CMI6U70PImYSU9d2nhxLttkkYKF01fZ/Q9n6Cvu0D1i7gd1rYQZjG2ynYrtL5md8r5P7C7YO2PF8PwRFQamaBwAA | base64 -d | gzip -d
+			echo -e "\n$YELLOW支付宝扫码：$RESET\n"
+			echo H4sIAAAAAAAAA71USQ7EMAi7zyv8VA4c8oI+sC8ZqQ3gLNC5TCVUKSlgsAnn0c4X7fMm2IyH81A2XNf3wb0Et2d4J3EJQgMog/Rw0Pn66uKdZyRsO3tJYp5qaEij9hrozpolV662nz17EV1igVgQUBPEDQy7Owh+6sYLE+4DlF24I2VYLJVKgRQRzpG1EyJdhYPhB7Wq/K2zINwLaM44w9wKT0mlhmSMjeKLN+Uj5koGuSlKIyBnKtA34yBLaJthCu1nFVkmUy6YtKEEHjRJ94D6NIxyBFFtXABJ9mEbCFV8/xD/qKPV72G3B+Ak82PtzCB21jQCT296tz/WFcESrZeTQ/4u/mqv430B27+RdoQHAAA= | base64 -d | gzip -d && exit
+			;;
 		0)
 			echo -e "\n$GREEN=========================================================$RESET"
 			echo -e "\n$PINK\t[[  已退出小米路由器简易安装插件脚本  ]]$RESET"
 			echo -e "\n$RED=========================================================$RESET"
 			echo -e "\n感谢使用$YELLOW小米路由器$GREEN简易安装插件脚本 $PINK$version$RESET ，觉得好用希望能够$RED$BLINK打赏支持~！$RESET"
 			echo -e "\n您的小小支持是我持续更新的动力~~~$RED$BLINK十分感谢~ ~ ~ ! ! !$RESET"
-			echo -e "\n$YELLOW打赏地址：${SKYBLUE}https://github.com/xilaochengv/BuildKernelSU$RESET"
+			echo -e "\n$YELLOW打赏地址：${SKYBLUE}https://github.com/xilaochengv/BuildKernelSU$RESET 或$RED$BLINK主页面输入：99$RESET"
 			echo -e "\n$GREEN问题反馈：${SKYBLUE}https://www.right.com.cn/forum/thread-8322811-1-1.html$RESET"
 			echo -e "\n$RED=========================================================$RESET" && exit
 		esac
@@ -831,5 +838,5 @@ main(){
 echo -e "\n$YELLOW=========================================================$RESET" && rm -f /tmp/opkg_updated
 echo -e "\n欢迎使用$YELLOW小米路由器$GREEN简易安装插件脚本 $PINK$version$RESET ，觉得好用希望能够$RED$BLINK打赏支持~！$RESET"
 echo -e "\n您的小小支持是我持续更新的动力~~~$RED$BLINK十分感谢~ ~ ~ ! ! !$RESET"
-echo -e "\n$YELLOW打赏地址：${SKYBLUE}https://github.com/xilaochengv/BuildKernelSU$RESET"
+echo -e "\n$YELLOW打赏地址：${SKYBLUE}https://github.com/xilaochengv/BuildKernelSU$RESET 或$RED$BLINK主页面输入：99$RESET"
 echo -e "\n$GREEN问题反馈：${SKYBLUE}https://www.right.com.cn/forum/thread-8322811-1-1.html$RESET" && main
