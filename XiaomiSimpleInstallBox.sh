@@ -1,4 +1,4 @@
-version=v1.0.0
+version=v1.0.1
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m'
 hardware_release=$(cat /etc/openwrt_release | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_arch=$(cat /etc/openwrt_release | grep ARCH | awk -F "'" '{print $2}')
@@ -8,8 +8,8 @@ wanifname=$(uci get network.wan.ifname)
 MIRRORS="
 https://ghps.cc/
 https://gh.ddlc.top/
-https://mirror.ghproxy.com/
 https://hub.gitmirror.com/
+https://mirror.ghproxy.com/
 "
 log(){
 	echo "[ $(date '+%F %T') ] $1" >> ${0%/*}/XiaomiSimpleInstallBox.log
@@ -224,7 +224,11 @@ github_download(){
 	for MIRROR in $MIRRORS;do
 		curl --connect-timeout 3 -#${3}Lko /tmp/$1 "$MIRROR$2"
 		if [ "$?" = 0 ];then
-			url="$MIRROR$2" && break
+			if [ $(wc -c < /tmp/$1) -lt 512 ];then
+				rm -f /tmp/$1
+			else
+				url="$MIRROR$2" && break
+			fi
 		else
 			rm -f /tmp/$1
 		fi
@@ -738,41 +742,6 @@ sda_install(){
 	fi
 	main exit
 }
-update_check(){
-	echo -e "\n$GREEN=========================================================$RESET"
-	echo -e "\n$PINK[[  这里以下是小米路由器简易安装插件脚本检查更新过程  ]]$RESET"
-	echo -e "\n$YELLOW=========================================================$RESET"
-	rm -f /tmp/XiaomiSimpleInstallBox.sh.tmp
-	echo -e "\n即将获取$YELLOW最新版本脚本$RESET ······" && sleep 1
-	while [ ! -f /tmp/XiaomiSimpleInstallBox.sh.tmp ];do
-		echo -ne "\n" && github_download "XiaomiSimpleInstallBox.sh.tmp" "https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox.sh"
-		[ "$?" != 0 ] && {
-			echo -ne "\n"
-			curl --connect-timeout 3 -#Lko /tmp/XiaomiSimpleInstallBox.sh.tmp "https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox.sh"
-			[ "$?" != 0 ] && rm -f /tmp/XiaomiSimpleInstallBox.sh.tmp
-		}
-	done
-	if [ "$version" != "$(sed -n '1p' /tmp/XiaomiSimpleInstallBox.sh.tmp | grep -oE v[.0-9]{1,5})" ];then
-		echo -e "\n即将获取$YELLOW更新日志$RESET ······" && sleep 1
-		rm -f /tmp/XiaomiSimpleInstallBox-change.log
-		while [ ! -f /tmp/XiaomiSimpleInstallBox-change.log ];do
-			echo -ne "\n" && github_download "XiaomiSimpleInstallBox-change.log" "https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox-change.log"
-			[ "$?" != 0 ] && {
-				echo -ne "\n"
-				curl --connect-timeout 3 -#Lko /tmp/XiaomiSimpleInstallBox-change.log "https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox-change.log"
-				[ "$?" != 0 ] && rm -f /tmp/XiaomiSimpleInstallBox-change.log
-			}
-		done
-		mv -f /tmp/XiaomiSimpleInstallBox-change.log ${0%/*}/XiaomiSimpleInstallBox-change.log
-		echo -e "\n$YELLOW当前脚本版本：$PINK$version$RESET ，$GREEN现已更新到最新版：$PINK$(sed -n '1p' /tmp/XiaomiSimpleInstallBox.sh.tmp | grep -oE [.0-9]{1,5})$RESET ，$RED请重新运行脚本$RESET"
-		mv -f $0 ${0%/*}/XiaomiSimpleInstallBox.sh.$version.backup
-		mv -f /tmp/XiaomiSimpleInstallBox.sh.tmp ${0%/*}/XiaomiSimpleInstallBox.sh
-		chmod 755 ${0%/*}/XiaomiSimpleInstallBox.sh && exit
-	else
-		echo -e "\n当前已是$GREEN最新版本：$PINK$version$RESET，无需更新！"
-		rm -f /tmp/XiaomiSimpleInstallBox.sh.tmp && main exit
-	fi
-}
 main(){
 	[ "$1" = "exit" ] && echo -e "\n\n$PINK\t\t [[  即将返回主页面  ]]$RESET" && sleep 2
 	echo -e "\n$YELLOW=========================================================$RESET" && num=""
@@ -786,7 +755,6 @@ main(){
 	echo -e "\n4. $RED更新或下载$RESET并$GREEN启动$RESET${YELLOW}Aria2$RESET（经典下载神器）"
 	echo -e "\n5. $RED更新或下载$RESET并$GREEN启动$RESET${YELLOW}VSFTP$RESET（FTP 服务器搭建神器）"
 	echo -e "\n6. $RED更新或下载$RESET并$GREEN启动$RESET${YELLOW}Transmission$RESET（PT 下载神器）"
-	echo -e "\n9. $YELLOW检查脚本更新$RESET"
 	echo -e "\n99. $YELLOW给作者打赏支持$RESET"
 	echo "---------------------------------------------------------"
 	echo -e "0. 退出$YELLOW小米路由器$GREEN简易安装插件脚本$RESET"
@@ -812,9 +780,6 @@ main(){
 		6)
 			sda_install "transmission" "settings.json" "transmission-daemon" "5KB"
 			;;
-		9)
-			update_check
-			;;
 		99)
 			echo -e "\n$RED$BLINK十分感谢您的支持！！！！！！！！$RESET\n\n$YELLOW微信扫码：$RESET\n"
 			echo H4sIAAAAAAAAA71UwQ3DMAj8d4oblQcPJuiAmaRSHMMZYzcvS6hyXAPHcXB97Tpon5PJcj5cX2XDfS3wL2mW3i38FhkMwHNqoaSb9YP291p7rSInTCneDRugbLr0q7uhlbX7lkUwxxVsfctaMMW/2a87YPD01e+yGiF6onHq/MAvlFwGUO2AMW7VFwODFGolOMBToaU6d1UEAYwp+jtCN9dxdsppCr4Q4N0F5EbiEiKS/P5MRupGKMGIFp4Jv8jv1lzNyiLMg3QcEc03CMI6U70PImYSU9d2nhxLttkkYKF01fZ/Q9n6Cvu0D1i7gd1rYQZjG2ynYrtL5md8r5P7C7YO2PF8PwRFQamaBwAA | base64 -d | gzip -d
@@ -832,9 +797,10 @@ main(){
 			echo -e "\n$RED=========================================================$RESET" && exit
 		esac
 		[ -n "$(echo $num | sed 's/[0-9]//g')" -o -z "$num" ] && num="" && continue
-		[ "$num" -lt 1	-o "$num" -gt 5 ] && num=""
+		[ "$num" -lt 1	-o "$num" -gt 6 ] && num=""
 	done
 }
+echo -e "MIRRORS=\"$MIRRORS\"\ngithub_download(){\n\tfor MIRROR in \$MIRRORS;do\n\t\tcurl --connect-timeout 3 -sLko /tmp/\$1 \"\$MIRROR\$2\"\n\t\tif [ \"\$?\" = 0 ];then\n\t\t\t[ \$(wc -c < /tmp/\$1) -lt 512 ] && rm -f /tmp/\$1 || break\n\t\telse\n\t\t\trm -f /tmp/\$1\n\t\tfi\n\tdone\n\t[ -f /tmp/\$1 ] && return 0 || return 1\n}\nrm -f /tmp/XiaomiSimpleInstallBox.sh.tmp && for tmp in \$(ps | grep _update_check | awk '{print \$1}');do [ \"\$tmp\" != \"\$\$\" ] && killpid \$tmp;done\nwhile [ ! -f /tmp/XiaomiSimpleInstallBox.sh.tmp ];do\n\tgithub_download \"XiaomiSimpleInstallBox.sh.tmp\" \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox.sh\"\n\t[ \"\$?\" != 0 ] && {\n\t\tcurl --connect-timeout 3 -sLko /tmp/XiaomiSimpleInstallBox.sh.tmp \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox.sh\"\n\t\t[ \"\$?\" != 0 ] && rm -f /tmp/XiaomiSimpleInstallBox.sh.tmp\n\t}\ndone\nif [ \"$version\" != \"\$(sed -n '1p' /tmp/XiaomiSimpleInstallBox.sh.tmp | grep -oE v[.0-9]{1,5})\" ];then\n\trm -f /tmp/XiaomiSimpleInstallBox-change.log\n\twhile [ ! -f /tmp/XiaomiSimpleInstallBox-change.log ];do\n\t\tgithub_download \"XiaomiSimpleInstallBox-change.log\" \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox-change.log\"\n\t\t[ \"\$?\" != 0 ] && {\n\t\t\tcurl --connect-timeout 3 -sLko /tmp/XiaomiSimpleInstallBox-change.log \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox-change.log\"\n\t\t\t[ \"\$?\" != 0 ] && rm -f /tmp/XiaomiSimpleInstallBox-change.log\n\t\t}\n\tdone\n\tmv -f /tmp/XiaomiSimpleInstallBox-change.log ${0%/*}/XiaomiSimpleInstallBox-change.log\n\tmv -f $0 ${0%/*}/XiaomiSimpleInstallBox.sh.$version.backup\n\tmv -f /tmp/XiaomiSimpleInstallBox.sh.tmp ${0%/*}/XiaomiSimpleInstallBox.sh\n\tchmod 755 ${0%/*}/XiaomiSimpleInstallBox.sh\n\techo -e \"\\\n$PINK=========================================================$RESET\"\n\techo -e \"\\\n$YELLOW小米路由器$GREEN简易安装插件脚本 $PINK$version $BLUE已自动更新到最新版：$PINK\$(sed -n '1p' /tmp/XiaomiSimpleInstallBox.sh.tmp | grep -oE v[.0-9]{1,5}) $BLUE，请重新运行脚本$RESET\"\n\techo -e \"\\\n$PINK=========================================================$RESET\"\nelse\n\trm -f /tmp/XiaomiSimpleInstallBox.sh.tmp\nfi\nrm -f /tmp/XiaomiSimpleInstallBox_update_check" > /tmp/XiaomiSimpleInstallBox_update_check && chmod 755 /tmp/XiaomiSimpleInstallBox_update_check && /tmp/XiaomiSimpleInstallBox_update_check &
 echo -e "\n$YELLOW=========================================================$RESET" && rm -f /tmp/opkg_updated
 echo -e "\n欢迎使用$YELLOW小米路由器$GREEN简易安装插件脚本 $PINK$version$RESET ，觉得好用希望能够$RED$BLINK打赏支持~！$RESET"
 echo -e "\n您的小小支持是我持续更新的动力~~~$RED$BLINK十分感谢~ ~ ~ ! ! !$RESET"
