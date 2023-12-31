@@ -1,9 +1,9 @@
-version=v1.0.1
+version=v1.0.2
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m'
 hardware_release=$(cat /etc/openwrt_release | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_arch=$(cat /etc/openwrt_release | grep ARCH | awk -F "'" '{print $2}')
 sdalist=$(df | sed -n '1!p' | grep -vE "rom|tmp|ini|overlay" | awk '{print $6}')
-hostip=$(ip route | grep br-lan | awk {'print $9'})
+hostip=$(uci get network.lan.ipaddr)
 wanifname=$(uci get network.wan.ifname)
 MIRRORS="
 https://ghps.cc/
@@ -622,7 +622,7 @@ sda_install(){
 						echo -e "cp -f /etc/config/dhcp /etc/config/dhcp.backup\nuci set dhcp.@dnsmasq[0].port=0 && uci commit && /etc/init.d/dnsmasq restart &> /dev/null" >> $downloadfileinit
 					else
 						sed -i "7a uci del firewall.lan53rdr3 && uci commit && /etc/init.d/firewall restart" $downloadfileinit
-						echo "uci set firewall.lan53rdr3=redirect && uci set firewall.lan53rdr3.name=$1-lan53rdr3 && uci set firewall.lan53rdr3.proto=tcpudp && uci set firewall.lan53rdr3.ftype=1 && uci set firewall.lan53rdr3.dest_ip=\$(ip route | grep br-lan | awk {'print \$9'}) && uci set firewall.lan53rdr3.src=lan && uci set firewall.lan53rdr3.dest=lan && uci set firewall.lan53rdr3.target=DNAT && uci set firewall.lan53rdr3.src_dport=53 && uci set firewall.lan53rdr3.dest_port=$adguardhomednsport && uci commit && /etc/init.d/firewall restart" >> $downloadfileinit
+						echo "uci set firewall.lan53rdr3=redirect && uci set firewall.lan53rdr3.name=$1-lan53rdr3 && uci set firewall.lan53rdr3.proto=tcpudp && uci set firewall.lan53rdr3.ftype=1 && uci set firewall.lan53rdr3.dest_ip=\$(uci get network.lan.ipaddr) && uci set firewall.lan53rdr3.src=lan && uci set firewall.lan53rdr3.dest=lan && uci set firewall.lan53rdr3.target=DNAT && uci set firewall.lan53rdr3.src_dport=53 && uci set firewall.lan53rdr3.dest_port=$adguardhomednsport && uci commit && /etc/init.d/firewall restart" >> $downloadfileinit
 					fi
 				}
 			}
@@ -744,6 +744,16 @@ sda_install(){
 	fi
 	main exit
 }
+domainblacklist_update(){
+	[ -f /etc/domainblacklist ] && [ -n "$(grep $devmac /etc/domainblacklist)" ] && {
+		echo -e "\n$SKYBLUE$devmac $GREEN$devname$YELLOW当前已添加网页黑名单：$RESET"
+		echo "---------------------------------------------------------"
+		sed -n /$devmac/p /etc/domainblacklist | awk '{print NR":'$SKYBLUE'\t"$2"'$RESET'"}'
+		echo "---------------------------------------------------------"	
+	}
+	[ "$1" = "reload" ] && /etc/domainblacklist "reload"
+	return 0
+}
 main(){
 	[ "$1" = "exit" ] && echo -e "\n\n$PINK\t\t [[  即将返回主页面  ]]$RESET" && sleep 2
 	echo -e "\n$YELLOW=========================================================$RESET" && num=""
@@ -757,6 +767,7 @@ main(){
 	echo -e "\n4. $RED更新或下载$RESET并$GREEN启动$RESET${YELLOW}Aria2$RESET（经典下载神器）"
 	echo -e "\n5. $RED更新或下载$RESET并$GREEN启动$RESET${YELLOW}VSFTP$RESET（FTP 服务器搭建神器）"
 	echo -e "\n6. $RED更新或下载$RESET并$GREEN启动$RESET${YELLOW}Transmission$RESET（PT 下载神器）"
+	echo -e "\n7. $GREEN添加$RESET或$RED删除$RESET设备禁止访问网页$RED黑名单$RESET（针对某个设备禁止访问黑名单中的网页）"
 	echo -e "\n99. $YELLOW给作者打赏支持$RESET"
 	echo "---------------------------------------------------------"
 	echo -e "0. 退出$YELLOW小米路由器$GREEN简易安装插件脚本$RESET"
@@ -782,6 +793,69 @@ main(){
 		6)
 			sda_install "transmission" "settings.json" "transmission-daemon" "5KB"
 			;;
+		7)
+			echo -e "\n$PINK请选择需要操作的设备：$RESET" && devnum="" && domain=""
+			echo "---------------------------------------------------------"
+			if [ -f /tmp/dhcp.leases ];then
+				echo -e "${GREEN}ID\t$SKYBLUE设备 MAC 地址\t\t$PINK设备 IP 地址\t\t$GREEN设备名称$RESET"
+				cat /tmp/dhcp.leases | awk '{print NR":'$SKYBLUE'\t"$2"'$PINK'\t"$3"'$GREEN'\t\t"$4"'$RESET'"}'
+			else
+				echo -e "$RED获取设备列表失败！请手动输入 MAC 地址进行继续$RESET"
+			fi
+			echo -e "255.\t$SKYBLUE手动输入 MAC 地址$RESET"
+			echo "---------------------------------------------------------"
+			echo -e "0.\t返回主页面"
+			while [ -z "$devnum" ];do
+				echo -ne "\n"
+				read -p "请输入对应设备的数字 > " devnum
+				[ -n "$(echo $devnum | sed 's/[0-9]//g')" -o -z "$devnum" ] && devnum="" && continue
+				if [ -f /tmp/dhcp.leases ];then
+					[ "$devnum" -gt $(cat /tmp/dhcp.leases | wc -l) -a "$devnum" != 255 ] && devnum="" && continue
+				else
+					[ "$devnum" != 255 ] && devnum="" && continue
+				fi
+				[ "$devnum" -eq 0 ] && main exit
+			done
+			devmac=$(sed -n ${devnum}p /tmp/dhcp.leases 2> /dev/null | awk '{print $2}')
+			devname="$(sed -n ${devnum}p /tmp/dhcp.leases 2> /dev/null | awk '{print $4}') "
+			[ "$devnum" = 255 ] && {
+				echo -e "\n$PINK请输入 xx:xx:xx:xx:xx:xx 格式的 MAC 地址：$RESET" && devmac=""
+				echo "---------------------------------------------------------"
+				while [ -z "$devmac" ];do
+					echo -ne "\n"
+					read -p "请输入 xx:xx:xx:xx:xx:xx 格式的 MAC 地址 > " devmac
+					[ -z "$devmac" ] && continue
+					[ "$devmac" = 0 ] && main exit
+					[ -z "$(echo $devmac |grep -E '^([0-9a-f][02468ace])(([:]([0-9a-f]{2})){5})$')" ] && echo -e "\n$RED输入错误！请重新输入！$RESET" && devmac="" && continue
+					devmac=$(echo $devmac | awk '{print tolower($0)}')
+				done
+			}
+			echo -e "\n$PINK请输入要添加的网页地址或网页地址包含的关键字（如 ${SKYBLUE}www.baidu.com $PINK或 ${SKYBLUE}baidu.com $PINK或 ${SKYBLUE}baidu$PINK）：$RESET"
+			echo "---------------------------------------------------------"
+			echo -e "0.\t返回主页面" && domainblacklist_update
+			[ ! -f /etc/domainblacklist -o -z "$(sed -n 1p /etc/domainblacklist 2> /dev/null | grep reload)" ] && echo -e "reload(){\n\tiptables -D FORWARD -i br-lan -j DOMAIN_REJECT_RULE &> /dev/null\n\tiptables -F DOMAIN_REJECT_RULE &> /dev/null\n\tiptables -X DOMAIN_REJECT_RULE &> /dev/null\n\tiptables -N DOMAIN_REJECT_RULE\n\tiptables -I FORWARD -i br-lan -j DOMAIN_REJECT_RULE\n\tsed -n 15,\$\$p /etc/domainblacklist | while read LINE;do\n\t\tiptables -A DOMAIN_REJECT_RULE -m mac --mac-source \${LINE:1:18} -m string --string \"\${LINE:19:\$\$}\" --algo bm -j REJECT\n\tdone\n}\ndomain_rule_check(){\n\t[ -z \"iptables -S FORWARD | grep -e -i | head -1 | grep DOMAIN\" ] && reload\n}\n[ \"\$1\" = \"reload\" ] && reload || domain_rule_check" > /etc/domainblacklist && log "新建文件/etc/domainblacklist" && chmod 755 /etc/domainblacklist
+			[ -z "$(grep domainblacklist /etc/crontabs/root)" ] && echo "*/1 * * * * /etc/domainblacklist" >> /etc/crontabs/root && /etc/init.d/cron restart && log "添加定时任务domainblacklist到/etc/crontabs/root文件中"
+			[ -n "$(grep $devmac /etc/domainblacklist)" ] && echo -e "$PINK删除请输入 ${YELLOW}-ID $PINK，如：${YELLOW}-2$PINK 删除第二条已添加网页黑名单$RESET"
+			while [ -z "$domain" ];do
+				echo -ne "\n"
+				read -p "请输入要过滤的网页地址或网页地址包含的关键字 > " domain
+				[ -z "$domain" ] && continue
+				[ "$domain" = 0 ] && main exit
+				[ "${domain:0:1}" = "-" ] && {
+					[ -n "$(echo ${domain:1:$$} | sed 's/[0-9]//g')" -o -z "$(grep $devmac /etc/domainblacklist 2> /dev/null)" ] && echo -e "\n$RED输入错误！请重新输入！$RESET" && domain="" && continue
+					domainrule=$(grep $devmac /etc/domainblacklist | awk '{print $2}' | sed -n ${domain:1:$$}p | sed 's/#//')
+					if [ -n "$domainrule" ];then
+						sed -i "/$devmac $domainrule$/d" /etc/domainblacklist
+						echo -e "\n$SKYBLUE$devmac $GREEN$devname$YELLOW网页黑名单规则 $SKYBLUE$domainrule $RED已删除！$RESET" && sleep 1 && domainblacklist_update "reload" && domain="" && continue
+					else
+						echo -e "\n$RED输入错误！请重新输入！$RESET" && domain="" && continue
+					fi
+				}
+				[ -n "$(grep -E "$devmac.*$domain$" /etc/domainblacklist)" ] && echo -e "\n$SKYBLUE$devmac $GREEN$devname$YELLOW网页黑名单规则 $SKYBLUE$domain $RED已存在！$RESET" && sleep 1 && domainblacklist_update && domain="" && continue
+				echo "#$devmac $domain" >> /etc/domainblacklist
+				echo -e "\n$SKYBLUE$devmac $GREEN$devname$YELLOW网页黑名单规则 $SKYBLUE$domain $GREEN添加成功！$RESET" && sleep 1 && domainblacklist_update "reload" && domain=""
+			done
+			;;
 		99)
 			echo -e "\n$RED$BLINK十分感谢您的支持！！！！！！！！$RESET\n\n$YELLOW微信扫码：$RESET\n"
 			echo H4sIAAAAAAAAA71UwQ3DMAj8d4oblQcPJuiAmaRSHMMZYzcvS6hyXAPHcXB97Tpon5PJcj5cX2XDfS3wL2mW3i38FhkMwHNqoaSb9YP291p7rSInTCneDRugbLr0q7uhlbX7lkUwxxVsfctaMMW/2a87YPD01e+yGiF6onHq/MAvlFwGUO2AMW7VFwODFGolOMBToaU6d1UEAYwp+jtCN9dxdsppCr4Q4N0F5EbiEiKS/P5MRupGKMGIFp4Jv8jv1lzNyiLMg3QcEc03CMI6U70PImYSU9d2nhxLttkkYKF01fZ/Q9n6Cvu0D1i7gd1rYQZjG2ynYrtL5md8r5P7C7YO2PF8PwRFQamaBwAA | base64 -d | gzip -d
@@ -799,7 +873,7 @@ main(){
 			echo -e "\n$RED=========================================================$RESET" && exit
 		esac
 		[ -n "$(echo $num | sed 's/[0-9]//g')" -o -z "$num" ] && num="" && continue
-		[ "$num" -lt 1	-o "$num" -gt 6 ] && num=""
+		[ "$num" -lt 1	-o "$num" -gt 7 ] && num=""
 	done
 }
 echo -e "MIRRORS=\"$MIRRORS\"\ngithub_download(){\n\tfor MIRROR in \$MIRRORS;do\n\t\tcurl --connect-timeout 3 -sLko /tmp/\$1 \"\$MIRROR\$2\"\n\t\tif [ \"\$?\" = 0 ];then\n\t\t\t[ \$(wc -c < /tmp/\$1) -lt 1024 ] && rm -f /tmp/\$1 || break\n\t\telse\n\t\t\trm -f /tmp/\$1\n\t\tfi\n\tdone\n\t[ -f /tmp/\$1 ] && return 0 || return 1\n}\nrm -f /tmp/XiaomiSimpleInstallBox.sh.tmp && for tmp in \$(ps | grep _update_check | awk '{print \$1}');do [ \"\$tmp\" != \"\$\$\" ] && killpid \$tmp;done\nwhile [ ! -f /tmp/XiaomiSimpleInstallBox.sh.tmp ];do\n\tgithub_download \"XiaomiSimpleInstallBox.sh.tmp\" \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox.sh\"\n\t[ \"\$?\" != 0 ] && {\n\t\tcurl --connect-timeout 3 -sLko /tmp/XiaomiSimpleInstallBox.sh.tmp \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox.sh\"\n\t\t[ \"\$?\" != 0 ] && rm -f /tmp/XiaomiSimpleInstallBox.sh.tmp\n\t}\ndone\nif [ \"$version\" != \"\$(sed -n '1p' /tmp/XiaomiSimpleInstallBox.sh.tmp | grep -oE v[.0-9]{1,5})\" ];then\n\trm -f /tmp/XiaomiSimpleInstallBox-change.log\n\twhile [ ! -f /tmp/XiaomiSimpleInstallBox-change.log ];do\n\t\tgithub_download \"XiaomiSimpleInstallBox-change.log\" \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox-change.log\"\n\t\t[ \"\$?\" != 0 ] && {\n\t\t\tcurl --connect-timeout 3 -sLko /tmp/XiaomiSimpleInstallBox-change.log \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox-change.log\"\n\t\t\t[ \"\$?\" != 0 ] && rm -f /tmp/XiaomiSimpleInstallBox-change.log\n\t\t}\n\tdone\n\techo -e \"\\\n$PINK=========================================================$RESET\"\n\techo -e \"\\\n$YELLOW小米路由器$GREEN简易安装插件脚本 $PINK$version $BLUE已自动更新到最新版：$PINK\$(sed -n '1p' /tmp/XiaomiSimpleInstallBox.sh.tmp | grep -oE v[.0-9]{1,5}) $BLUE，请重新运行脚本$RESET\"\n\techo -e \"\\\n$PINK=========================================================$RESET\"\n\tmv -f /tmp/XiaomiSimpleInstallBox-change.log ${0%/*}/XiaomiSimpleInstallBox-change.log\n\tmv -f $0 ${0%/*}/XiaomiSimpleInstallBox.sh.$version.backup\n\tmv -f /tmp/XiaomiSimpleInstallBox.sh.tmp ${0%/*}/XiaomiSimpleInstallBox.sh\n\tchmod 755 ${0%/*}/XiaomiSimpleInstallBox.sh\nelse\n\trm -f /tmp/XiaomiSimpleInstallBox.sh.tmp\nfi\nrm -f /tmp/XiaomiSimpleInstallBox_update_check" > /tmp/XiaomiSimpleInstallBox_update_check && chmod 755 /tmp/XiaomiSimpleInstallBox_update_check && /tmp/XiaomiSimpleInstallBox_update_check &
