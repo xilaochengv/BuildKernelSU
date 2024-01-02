@@ -1,4 +1,4 @@
-version=v1.0.3
+version=v1.0.4
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m'
 hardware_release=$(cat /etc/openwrt_release | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_arch=$(cat /etc/openwrt_release | grep ARCH | awk -F "'" '{print $2}')
@@ -6,18 +6,22 @@ sdalist=$(df | sed -n '1!p' | grep -vE "rom|tmp|ini|overlay" | awk '{print $6}')
 hostip=$(uci get network.lan.ipaddr)
 wanifname=$(uci get network.wan.ifname)
 MIRRORS="
-https://ghps.cc/
 https://gh.ddlc.top/
 https://hub.gitmirror.com/
 https://mirror.ghproxy.com/
+https://ghps.cc/
 "
 log(){
 	echo "[ $(date '+%F %T') ] $1" >> ${0%/*}/XiaomiSimpleInstallBox.log
 }
 opkg_test_install(){
-	echo -e "\n本次操作需要使用到 $YELLOW$1$RESET" && sleep 1
-	if [ -z "$(opkg list-installed | grep $1 2> /dev/null)" ];then
+	[ -z "$(opkg list-installed | grep $1 2> /dev/null)" ] && {
+		echo -e "\n本次操作需要使用到 $YELLOW$1$RESET" && sleep 1
 		echo -e "\n本机还$RED没有安装 $YELLOW$1$RESET ！即将通过 opkg 下载安装\n" && sleep 1
+		[ "$1" = "aria2" ] && rm -rf /www/ariang && opkg remove ariang aria2 &> /dev/null
+		[ "$1" = "vsftpd" ] && rm -f /etc/vsftpd.conf && opkg remove vsftpd &> /dev/null
+		[ "$1" = "transmission" ] && rm -rf /etc/config/transmission /usr/share/transmission/ && opkg remove transmission-web transmission-daemon-openssl transmission-daemon-mbedtls libnatpmp libminiupnpc &> /dev/null
+		[ "$1" = "wakeonlan" ] && rm -rf /usr/share/perl /usr/lib/perl5/ && opkg remove wakeonlan perlbase-net perlbase-time perlbase-dynaloader perlbase-filehandle perlbase-class perlbase-getopt perlbase-io perlbase-socket perlbase-selectsaver perlbase-symbol perlbase-scalar perlbase-posix perlbase-tie perlbase-list perlbase-fcntl perlbase-xsloader perlbase-errno perlbase-bytes perlbase-base perlbase-essential perlbase-config perl &> /dev/null
 		[ ! -f /tmp/opkg_updated ] && {
 			opkg update
 			if [ "$?" != 0 ];then
@@ -37,9 +41,7 @@ opkg_test_install(){
 		opkg install $1
 		[ "$?" != 0 ] && echo -e "\n安装 ${YELLOW}$1$RED 失败！$RESET请检查 $BLUE/etc/opkg/distfeeds.conf$RESET 中的地址是否正确并有效！" && main exit
 		echo -e "\n$GREEN安装 $YELLOW$1 $GREEN成功$RESET" && sleep 2 && [ "$1" = "vsftpd" ] && newuser=1
-	else
-		echo -e "\n检测到已安装 $YELLOW$1$RESET ，跳过安装" && sleep 1
-	fi
+	}
 	[ "$1" = "vsftpd" ] && {
 		[ -z "$newuser" ] && {
 			echo -e "\n$PINK是否需要重新配置设置参数？$RESET" && num=""
@@ -175,11 +177,127 @@ opkg_test_install(){
 		fi
 		main exit
 	}
+	[ "$1" = "wakeonlan" ] && {
+		echo -e "\n$PINK请输入你的选项$RESET" && num=""
+		echo "---------------------------------------------------------"
+		echo "1. 实时网路唤醒网络设备"
+		echo "2. 添加定时网络唤醒任务"
+		echo "3. 删除已添加定时网路唤醒任务"
+		echo "---------------------------------------------------------"
+		echo "0. 返回主页面"
+		while [ -z "$num" ];do
+			echo -ne "\n"
+			read -p "请输入对应选项的数字 > " num
+			[ -n "$(echo $num | sed 's/[0-9]//g')" -o -z "$num" ] && num="" && continue
+			[ "$num" -gt 3 ] && num="" && continue
+			[ "$num" -eq 0 ] && main exit
+		done
+		if [ "$num" != 3 ];then
+			echo -e "\n$PINK请选择需要操作的设备：$RESET" && devnum=""
+			echo "---------------------------------------------------------"
+			if [ -f /tmp/dhcp.leases ];then
+				echo -e "${GREEN}ID\t$SKYBLUE设备 MAC 地址\t\t$PINK设备 IP 地址\t$GREEN设备名称$RESET"
+				cat /tmp/dhcp.leases | awk '{print NR":'$SKYBLUE'\t"$2"'$PINK'\t"$3"'$GREEN'\t"$4"'$RESET'"}'
+			else
+				echo -e "$RED获取设备列表失败！请手动输入 MAC 地址进行继续$RESET"
+			fi
+			echo -e "255.\t$SKYBLUE手动输入 MAC 地址$RESET"
+			echo "---------------------------------------------------------"
+			echo -e "0.\t返回主页面"
+			while [ -z "$devnum" ];do
+				echo -ne "\n"
+				read -p "请输入对应设备的数字 > " devnum
+				[ -n "$(echo $devnum | sed 's/[0-9]//g')" -o -z "$devnum" ] && devnum="" && continue
+				if [ -f /tmp/dhcp.leases ];then
+					[ "$devnum" -gt $(cat /tmp/dhcp.leases | wc -l) -a "$devnum" != 255 ] && devnum="" && continue
+				else
+					[ "$devnum" != 255 ] && devnum="" && continue
+				fi
+				[ "$devnum" -eq 0 ] && main exit
+			done
+			devmac=$(sed -n ${devnum}p /tmp/dhcp.leases 2> /dev/null | awk '{print $2}')
+			devname=" $(sed -n ${devnum}p /tmp/dhcp.leases 2> /dev/null | awk '{print $4}') "
+			[ "$devnum" = 255 ] && {
+				echo -e "\n$PINK请输入 xx:xx:xx:xx:xx:xx 格式的 MAC 地址：$RESET" && devmac=""
+				echo "---------------------------------------------------------"
+				while [ -z "$devmac" ];do
+					echo -ne "\n"
+					read -p "请输入 xx:xx:xx:xx:xx:xx 格式的 MAC 地址 > " devmac
+					devmac=$(echo $devmac | awk '{print tolower($0)}')
+					[ -z "$devmac" ] && continue
+					[ "$devmac" = 0 ] && main exit
+					[ -z "$(echo $devmac |grep -E '^([0-9a-f][02468ace])(([:]([0-9a-f]{2})){5})$')" ] && echo -e "\n$RED输入错误！请重新输入！$RESET" && devmac="" && continue
+				done
+			}
+			devip=$(ip neigh | grep $devmac | awk '{print $1}')
+			[ -z "$devip" ] && {
+				devip=$(ip neigh | grep FAILED | head -1 | awk '{print $1}')
+				[ -z "$devip" ] && devip=159 && while [ -n "$(ip neigh | grep $devip)" ];do let devip++;done && devip="$(uci get network.lan.ipaddr | sed 's/[0-9]*$//')$devip"
+			}
+			if [ "$num" = 1 ];then
+				ip neigh add "$devip" lladdr "$devmac" nud stale dev br-lan &> /dev/null || ip neigh chg "$devip" lladdr "$devmac" nud stale dev br-lan
+				wakeonlan -i $devip $devmac &> /dev/null && echo -e "\n$SKYBLUE$devmac$GREEN$devname$YELLOW发送网络唤醒包成功！$RESET" && ip neigh del "$devip" dev br-lan
+			else
+				echo -e "\n$PINK请输入要设置的分钟时间（ 0-59 ）：$RESET" && minute=""
+				echo "---------------------------------------------------------"
+				while [ -z "$minute" ];do
+					echo -ne "\n"
+					read -p "请输入要设置的分钟时间（ 0-59 ) > " minute
+					[ -n "$(echo $minute | sed 's/[0-9]//g')" -o -z "$minute" ] && minute="" && continue
+					[ "$minute" -lt 0 -o "$minute" -gt 59 ] && minute=""
+				done
+				echo -e "\n$PINK请输入要设置的整点时间（ 0-23 ）：$RESET" && hour=""
+				echo "---------------------------------------------------------"
+				while [ -z "$hour" ];do
+					echo -ne "\n"
+					read -p "请输入要设置的整点时间（ 0-23 ) > " hour
+					[ -n "$(echo $hour | sed 's/[0-9]//g')" -o -z "$hour" ] && hour="" && continue
+					[ "$hour" -lt 0 -o "$hour" -gt 23 ] && hour=""
+				done
+				echo -e "\n$PINK请输入要设置的星期时间（ 1-7 或 *：每天 ）：$RESET" && week=""
+				echo "---------------------------------------------------------"
+				while [ -z "$week" ];do
+					echo -ne "\n"
+					read -p "请输入要设置的星期时间（ 1-7 或 *：每天 ) > " week
+					[ "$week" = "*" ] && wolinfo="每天" && break
+					[ -n "$(echo $week | sed 's/[0-9]//g')" -o -z "$week" ] && week="" && continue
+					[ "$week" -lt 1 -o "$week" -gt 7 ] && week=""
+					wolinfo="每周$week"
+				done
+				echo "$minute $hour * * $week ip neigh add \"$devip\" lladdr \"$devmac\" nud stale dev br-lan || ip neigh chg \"$devip\" lladdr \"$devmac\" nud stale dev br-lan && wakeonlan -i $devip $devmac && ip neigh del \"$devip\" dev br-lan #$wolinfo $hour点$minute分 网络唤醒设备 $devmac$devname" >> /etc/crontabs/root && /etc/init.d/cron restart &> /dev/null
+				echo -e "\n$YELLOW定时 $PINK$wolinfo $hour点$minute分 网络唤醒设备 $SKYBLUE$devmac$GREEN$devname$YELLOW任务添加成功！$RESET"
+			fi
+		else
+			echo -e "\n$PINK请输入要删除的任务序号：$RESET" && num=""
+			while [ -z "$num" ];do
+				if [ -n "$(cat "/etc/crontabs/root" | grep '网络唤醒')" ];then
+					echo "---------------------------------------------------------"
+					cat "/etc/crontabs/root" | grep '网络唤醒' | sed 's/.*#//' | awk '{print NR": "$0}'
+					echo "---------------------------------------------------------"
+					echo "0. 返回主页面"
+					echo -ne "\n"
+					read -p "请输入要删除的任务序号 > " num
+					[ -n "$(echo $num | sed 's/[0-9]//g')" -o -z "$num" ] && num="" && continue
+					[ "$num" -gt $(cat "/etc/crontabs/root" | grep '网络唤醒' | sed 's/.*#//' | wc -l) ] && num="" && continue
+					[ "$num" -eq 0 ] && main exit
+					ruleweek=$(cat "/etc/crontabs/root" | grep '网络唤醒' | sed 's/.*#//' | sed -n ${num}p | awk '{print $1}')
+					ruletime=$(cat "/etc/crontabs/root" | grep '网络唤醒' | sed 's/.*#//' | sed -n ${num}p | awk '{print $2}')
+					rulemac=$(cat "/etc/crontabs/root" | grep '网络唤醒' | sed 's/.*#//' | sed -n ${num}p | awk '{print $4}')
+					rulename=" $(cat "/etc/crontabs/root" | grep '网络唤醒' | sed 's/.*#//' | sed -n ${num}p | awk '{print $5}') "
+					sed -i "/$ruleweek $ruletime/{/$rulemac/d}" /etc/crontabs/root && /etc/init.d/cron restart &> /dev/null
+					echo -e "\n$YELLOW定时 $PINK$ruleweek $ruletime 网络唤醒设备 $SKYBLUE$rulemac$GREEN$rulename$YELLOW任务删除成功！$RESET" && sleep 1 && num=""
+				else
+					echo -e "\n$RED当前没有定时网络唤醒设备任务！$RESET" && num=1
+				fi
+			done
+		fi
+		main exit
+	}
 	return 0
 }
 sdadir_available_check(){
 	sdadiravailable=$(df | grep " ${sdadir%/*}$" | awk '{print $4}') && upxneeded=""
-	if [ -z "$(echo $1 | grep -oE 'aria2|vsftpd')" ];then
+	if [ -z "$(echo $1 | grep -oE 'aria2|vsftpd|transmission')" ];then
 		[ "$sdadiravailable" -lt $3 ] && {
 			echo -e "\n所选目录 $BLUE${sdadir%/*} $RED空间不足 $(($3/1024)) MB$RESET！无法直接下载使用！不过可以尝试使用 ${YELLOW}upx$RESET 压缩后使用" && sleep 2
 			tmpdiravailable=$(df | grep " /tmp$" | awk '{print $4}')
@@ -746,7 +864,7 @@ sda_install(){
 }
 domainblacklist_update(){
 	[ -f /etc/domainblacklist ] && [ -n "$(grep $devmac /etc/domainblacklist)" ] && {
-		echo -e "\n$SKYBLUE$devmac $GREEN$devname$YELLOW当前已添加网页黑名单：$RESET"
+		echo -e "\n$SKYBLUE$devmac$GREEN$devname$YELLOW当前已添加网页黑名单：$RESET"
 		echo "---------------------------------------------------------"
 		sed -n /$devmac/p /etc/domainblacklist | awk '{print NR":'$SKYBLUE'\t"$2"'$RESET'"}'
 		echo "---------------------------------------------------------"	
@@ -764,11 +882,12 @@ main(){
 	echo -e "1. $RED更新或下载$RESET并$GREEN启动$RESET最新版${YELLOW}qbittorrent增强版$RESET（BT & 磁链下载神器）"
 	echo -e "\n2. $RED更新或下载$RESET并$GREEN启动$RESET最新版${YELLOW}Alist$RESET（挂载网盘神器）"
 	echo -e "\n3. $RED更新或下载$RESET并$GREEN启动$RESET最新版${YELLOW}AdGuardHome$RESET（DNS 去广告神器）"
-	echo -e "\n4. $RED更新或下载$RESET并$GREEN启动$RESET${YELLOW}Aria2$RESET（经典下载神器）"
-	echo -e "\n5. $RED更新或下载$RESET并$GREEN启动$RESET${YELLOW}VSFTP$RESET（FTP 服务器搭建神器）"
-	echo -e "\n6. $RED更新或下载$RESET并$GREEN启动$RESET${YELLOW}Transmission$RESET（PT 下载神器）"
+	echo -e "\n4. $RED下载$RESET并$GREEN启动$RESET${YELLOW}Aria2$RESET（经典下载神器）"
+	echo -e "\n5. $RED下载$RESET并$GREEN启动$RESET${YELLOW}VSFTP$RESET（FTP 服务器搭建神器）"
+	echo -e "\n6. $RED下载$RESET并$GREEN启动$RESET${YELLOW}Transmission$RESET（PT 下载神器）"
 	echo -e "\n7. $GREEN添加$RESET或$RED删除$RESET设备禁止访问网页$RED黑名单$RESET（针对某个设备禁止访问黑名单中的网页）"
-	echo -e "\n99. $YELLOW给作者打赏支持$RESET"
+	echo -e "\n8. $GREEN实时$RESET或$RED定时$YELLOW网络唤醒局域网内设备$RESET"
+	echo -e "\n99. $RED$BLINK给作者打赏支持$RESET"
 	echo "---------------------------------------------------------"
 	echo -e "0. 退出$YELLOW小米路由器$GREEN简易安装插件脚本$RESET"
 	while [ -z "$num" ];do
@@ -797,8 +916,8 @@ main(){
 			echo -e "\n$PINK请选择需要操作的设备：$RESET" && devnum="" && domain=""
 			echo "---------------------------------------------------------"
 			if [ -f /tmp/dhcp.leases ];then
-				echo -e "${GREEN}ID\t$SKYBLUE设备 MAC 地址\t\t$PINK设备 IP 地址\t\t$GREEN设备名称$RESET"
-				cat /tmp/dhcp.leases | awk '{print NR":'$SKYBLUE'\t"$2"'$PINK'\t"$3"'$GREEN'\t\t"$4"'$RESET'"}'
+				echo -e "${GREEN}ID\t$SKYBLUE设备 MAC 地址\t\t$PINK设备 IP 地址\t$GREEN设备名称$RESET"
+				cat /tmp/dhcp.leases | awk '{print NR":'$SKYBLUE'\t"$2"'$PINK'\t"$3"'$GREEN'\t"$4"'$RESET'"}'
 			else
 				echo -e "$RED获取设备列表失败！请手动输入 MAC 地址进行继续$RESET"
 			fi
@@ -817,24 +936,24 @@ main(){
 				[ "$devnum" -eq 0 ] && main exit
 			done
 			devmac=$(sed -n ${devnum}p /tmp/dhcp.leases 2> /dev/null | awk '{print $2}')
-			devname="$(sed -n ${devnum}p /tmp/dhcp.leases 2> /dev/null | awk '{print $4}') "
+			devname=" $(sed -n ${devnum}p /tmp/dhcp.leases 2> /dev/null | awk '{print $4}') "
 			[ "$devnum" = 255 ] && {
 				echo -e "\n$PINK请输入 xx:xx:xx:xx:xx:xx 格式的 MAC 地址：$RESET" && devmac=""
 				echo "---------------------------------------------------------"
 				while [ -z "$devmac" ];do
 					echo -ne "\n"
 					read -p "请输入 xx:xx:xx:xx:xx:xx 格式的 MAC 地址 > " devmac
+					devmac=$(echo $devmac | awk '{print tolower($0)}')
 					[ -z "$devmac" ] && continue
 					[ "$devmac" = 0 ] && main exit
 					[ -z "$(echo $devmac |grep -E '^([0-9a-f][02468ace])(([:]([0-9a-f]{2})){5})$')" ] && echo -e "\n$RED输入错误！请重新输入！$RESET" && devmac="" && continue
-					devmac=$(echo $devmac | awk '{print tolower($0)}')
 				done
 			}
 			echo -e "\n$PINK请输入要添加的网页地址或网页地址包含的关键字（如 ${SKYBLUE}www.baidu.com $PINK或 ${SKYBLUE}baidu.com $PINK或 ${SKYBLUE}baidu$PINK）：$RESET"
 			echo "---------------------------------------------------------"
 			echo -e "0.\t返回主页面" && domainblacklist_update
 			[ ! -f /etc/domainblacklist -o -z "$(sed -n 1p /etc/domainblacklist 2> /dev/null | grep reload)" ] && echo -e "reload(){\n\tiptables -D FORWARD -i br-lan -j DOMAIN_REJECT_RULE &> /dev/null\n\tiptables -F DOMAIN_REJECT_RULE &> /dev/null\n\tiptables -X DOMAIN_REJECT_RULE &> /dev/null\n\tiptables -N DOMAIN_REJECT_RULE\n\tiptables -I FORWARD -i br-lan -j DOMAIN_REJECT_RULE\n\tsed -n 15,\$\$p /etc/domainblacklist | while read LINE;do\n\t\tiptables -A DOMAIN_REJECT_RULE -m mac --mac-source \${LINE:1:18} -m string --string \"\${LINE:19:\$\$}\" --algo bm -j REJECT\n\tdone\n}\ndomain_rule_check(){\n\t[ -z \"\$(iptables -S FORWARD | grep -e -i | head -1 | grep DOMAIN)\" ] && reload\n}\n[ \"\$1\" = \"reload\" ] && reload || domain_rule_check" > /etc/domainblacklist && log "新建文件/etc/domainblacklist" && chmod 755 /etc/domainblacklist
-			[ -z "$(grep domainblacklist /etc/crontabs/root)" ] && echo "*/1 * * * * /etc/domainblacklist" >> /etc/crontabs/root && /etc/init.d/cron restart && log "添加定时任务domainblacklist到/etc/crontabs/root文件中"
+			[ -z "$(grep domainblacklist /etc/crontabs/root)" ] && echo "*/1 * * * * /etc/domainblacklist" >> /etc/crontabs/root && /etc/init.d/cron restart &> /dev/null && log "添加定时任务domainblacklist到/etc/crontabs/root文件中"
 			[ -n "$(grep $devmac /etc/domainblacklist)" ] && echo -e "$PINK删除请输入 ${YELLOW}-ID $PINK，如：${YELLOW}-2$PINK 删除第二条已添加网页黑名单$RESET"
 			while [ -z "$domain" ];do
 				echo -ne "\n"
@@ -846,15 +965,18 @@ main(){
 					domainrule=$(grep $devmac /etc/domainblacklist | awk '{print $2}' | sed -n ${domain:1:$$}p | sed 's/#//')
 					if [ -n "$domainrule" ];then
 						sed -i "/$devmac $domainrule$/d" /etc/domainblacklist
-						echo -e "\n$SKYBLUE$devmac $GREEN$devname$YELLOW网页黑名单规则 $SKYBLUE$domainrule $RED已删除！$RESET" && sleep 1 && domainblacklist_update "reload" && domain="" && continue
+						echo -e "\n$SKYBLUE$devmac$GREEN$devname$YELLOW网页黑名单规则 $SKYBLUE$domainrule $RED已删除！$RESET" && sleep 1 && domainblacklist_update "reload" && domain="" && continue
 					else
 						echo -e "\n$RED输入错误！请重新输入！$RESET" && domain="" && continue
 					fi
 				}
-				[ -n "$(grep -E "$devmac.*$domain$" /etc/domainblacklist)" ] && echo -e "\n$SKYBLUE$devmac $GREEN$devname$YELLOW网页黑名单规则 $SKYBLUE$domain $RED已存在！$RESET" && sleep 1 && domainblacklist_update && domain="" && continue
+				[ -n "$(grep -E "$devmac.*$domain$" /etc/domainblacklist)" ] && echo -e "\n$SKYBLUE$devmac$GREEN$devname$YELLOW网页黑名单规则 $SKYBLUE$domain $RED已存在！$RESET" && sleep 1 && domainblacklist_update && domain="" && continue
 				echo "#$devmac $domain" >> /etc/domainblacklist
-				echo -e "\n$SKYBLUE$devmac $GREEN$devname$YELLOW网页黑名单规则 $SKYBLUE$domain $GREEN添加成功！$RESET" && sleep 1 && domainblacklist_update "reload" && domain=""
+				echo -e "\n$SKYBLUE$devmac$GREEN$devname$YELLOW网页黑名单规则 $SKYBLUE$domain $GREEN添加成功！$RESET" && sleep 1 && domainblacklist_update "reload" && domain=""
 			done
+			;;
+		8)
+			opkg_test_install "wakeonlan"
 			;;
 		99)
 			echo -e "\n$RED$BLINK十分感谢您的支持！！！！！！！！$RESET\n\n$YELLOW微信扫码：$RESET\n"
@@ -873,7 +995,7 @@ main(){
 			echo -e "\n$RED=========================================================$RESET" && exit
 		esac
 		[ -n "$(echo $num | sed 's/[0-9]//g')" -o -z "$num" ] && num="" && continue
-		[ "$num" -lt 1	-o "$num" -gt 7 ] && num=""
+		[ "$num" -lt 1	-o "$num" -gt 8 ] && num=""
 	done
 }
 echo -e "MIRRORS=\"$MIRRORS\"\ngithub_download(){\n\tfor MIRROR in \$MIRRORS;do\n\t\tcurl --connect-timeout 3 -sLko /tmp/\$1 \"\$MIRROR\$2\"\n\t\tif [ \"\$?\" = 0 ];then\n\t\t\t[ \$(wc -c < /tmp/\$1) -lt 1024 ] && rm -f /tmp/\$1 || break\n\t\telse\n\t\t\trm -f /tmp/\$1\n\t\tfi\n\tdone\n\t[ -f /tmp/\$1 ] && return 0 || return 1\n}\nrm -f /tmp/XiaomiSimpleInstallBox.sh.tmp && for tmp in \$(ps | grep _update_check | awk '{print \$1}');do [ \"\$tmp\" != \"\$\$\" ] && killpid \$tmp;done\nwhile [ ! -f /tmp/XiaomiSimpleInstallBox.sh.tmp ];do\n\tgithub_download \"XiaomiSimpleInstallBox.sh.tmp\" \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox.sh\"\n\t[ \"\$?\" != 0 ] && {\n\t\tcurl --connect-timeout 3 -sLko /tmp/XiaomiSimpleInstallBox.sh.tmp \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox.sh\"\n\t\t[ \"\$?\" != 0 ] && rm -f /tmp/XiaomiSimpleInstallBox.sh.tmp\n\t}\ndone\nif [ \"$version\" != \"\$(sed -n '1p' /tmp/XiaomiSimpleInstallBox.sh.tmp | sed 's/version=//')\" ];then\n\trm -f /tmp/XiaomiSimpleInstallBox-change.log\n\twhile [ ! -f /tmp/XiaomiSimpleInstallBox-change.log ];do\n\t\tgithub_download \"XiaomiSimpleInstallBox-change.log\" \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox-change.log\"\n\t\t[ \"\$?\" != 0 ] && {\n\t\t\tcurl --connect-timeout 3 -sLko /tmp/XiaomiSimpleInstallBox-change.log \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox-change.log\"\n\t\t\t[ \"\$?\" != 0 ] && rm -f /tmp/XiaomiSimpleInstallBox-change.log\n\t\t}\n\tdone\n\techo -e \"\\\n$PINK=========================================================$RESET\"\n\techo -e \"\\\n$YELLOW小米路由器$GREEN简易安装插件脚本 $PINK$version $BLUE已自动更新到最新版：$PINK\$(sed -n '1p' /tmp/XiaomiSimpleInstallBox.sh.tmp | grep -oE v[.0-9]{1,5}) $BLUE，请重新运行脚本$RESET\"\n\techo -e \"\\\n$PINK=========================================================$RESET\"\n\tmv -f /tmp/XiaomiSimpleInstallBox-change.log ${0%/*}/XiaomiSimpleInstallBox-change.log\n\tmv -f $0 ${0%/*}/XiaomiSimpleInstallBox.sh.$version.backup\n\tmv -f /tmp/XiaomiSimpleInstallBox.sh.tmp ${0%/*}/XiaomiSimpleInstallBox.sh\n\tchmod 755 ${0%/*}/XiaomiSimpleInstallBox.sh\nelse\n\trm -f /tmp/XiaomiSimpleInstallBox.sh.tmp\nfi\nrm -f /tmp/XiaomiSimpleInstallBox_update_check" > /tmp/XiaomiSimpleInstallBox_update_check && chmod 755 /tmp/XiaomiSimpleInstallBox_update_check && /tmp/XiaomiSimpleInstallBox_update_check &
