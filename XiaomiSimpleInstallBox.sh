@@ -1,4 +1,4 @@
-version=v1.0.4a
+version=v1.0.4b
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m'
 hardware_release=$(cat /etc/openwrt_release | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_arch=$(cat /etc/openwrt_release | grep ARCH | awk -F "'" '{print $2}')
@@ -780,7 +780,8 @@ sda_install(){
 		done
 		echo -e "\n$YELLOW$1$RESET 的下载默认保存路径已设置为：$BLUE$num$RESET" && sleep 1
 		[ "$1" = "aria2" ] && {
-			firewalllog "del" "$1" && touch $sdadir/aria2.session && [ ! -d $sdadir ] && mkdir -p $sdadir && log "新建文件夹$sdadir"
+			[ ! -d $sdadir ] && mkdir -p $sdadir && log "新建文件夹$sdadir"
+			firewalllog "del" "$1" && touch $sdadir/aria2.session
 			echo -e "#!/bin/sh\necho -e \"\\\ndownload-complete \$1 \$2 \$3\"\nDir=\"$num\"\nchmod -R 777 \"\$(echo \$Dir | sed 's#[^/]\$#&/#')\$(echo \$3 | sed -e \"s#\$Dir##\" -e 's#^/##' | awk -F '/' '{print \$1}')\"" > $sdadir/on-download-complete.sh && chmod 755 $sdadir/on-download-complete.sh
 			echo -e "#!/bin/sh\necho -e \"\\\ndownload-stop \$1 \$2 \$3\"\nDir=\"$num\"\nrm -rf \"\$(echo \$Dir | sed 's#[^/]\$#&/#')\$(echo \$3 | sed -e \"s#\$Dir##\" -e 's#^/##' | awk -F '/' '{print \$1}')\"\nrm -f \"\$(echo \$Dir | sed 's#[^/]\$#&/#')\$(echo \$3 | sed -e \"s#\$Dir##\" -e 's#^/##' | awk -F '/' '{print \$1}').aria2\"" > $sdadir/on-download-stop.sh && chmod 755 $sdadir/on-download-stop.sh
 			echo -e "ConfPath=\"$sdadir/aria2.conf\"\nrm -f /tmp/tracker_all.tmp && [ \$(cat /proc/uptime | awk '{print \$1}' | sed 's/\..*//') -le 60 ] && sleep 30\necho -e \"\\\n即将尝试获取最新 \\\033[1;33mTracker\\\033[0m 服务器列表（\\\033[1;33m成功与否不影响正常启动\\\033[0m） ······ \\\c\" && sleep 2\ncurl --connect-timeout 3 -skLo /tmp/tracker_all.tmp \"https://trackerslist.com/all.txt\"\n[ \"\$?\" != 0 ] && {\n\trm -f /tmp/tracker_all.tmp\n\techo -e \"\\\033[0;31m获取失败！\\\033[0m\" && sleep 2\n}\n[ -f /tmp/tracker_all.tmp ] && {\n\techo -e \"\\\033[1;32m获取成功！\\\033[0m\"\n\t#过滤IPv6的Tracker服务器地址：\n\tsed -i '/\/\/\[/d' /tmp/tracker_all.tmp\n\tsed -i \"/^$/d\" /tmp/tracker_all.tmp\n\tTrackers=\$(sed \":i;N;s|\\\n|,|;ti\" /tmp/tracker_all.tmp)\n\tsed -i \"s|bt-tracker=.*|bt-tracker=\$Trackers|\" \$ConfPath\n}\naria2c --conf-path=\$ConfPath -D &> /dev/null" > $sdadir/tracker_update.sh && chmod 755 $sdadir/tracker_update.sh
