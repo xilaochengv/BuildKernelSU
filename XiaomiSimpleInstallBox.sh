@@ -1,4 +1,4 @@
-version=v1.0.4b
+version=v1.0.4c
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m'
 hardware_release=$(cat /etc/openwrt_release | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_arch=$(cat /etc/openwrt_release | grep ARCH | awk -F "'" '{print $2}')
@@ -883,13 +883,13 @@ main(){
 	echo -e "\n$PINK请输入你的选项：$RESET"
 	echo "---------------------------------------------------------"
 	echo -e "1. $RED更新或下载$RESET并$GREEN启动$RESET最新版${YELLOW}qbittorrent增强版$RESET（BT & 磁链下载神器）"
-	echo -e "\n2. $RED更新或下载$RESET并$GREEN启动$RESET最新版${YELLOW}Alist$RESET（挂载网盘神器）"
-	echo -e "\n3. $RED更新或下载$RESET并$GREEN启动$RESET最新版${YELLOW}AdGuardHome$RESET（DNS 去广告神器）"
-	echo -e "\n4. $RED下载$RESET并$GREEN启动$RESET${YELLOW}Aria2$RESET（经典下载神器）"
-	echo -e "\n5. $RED下载$RESET并$GREEN启动$RESET${YELLOW}VSFTP$RESET（FTP 服务器搭建神器）"
-	echo -e "\n6. $RED下载$RESET并$GREEN启动$RESET${YELLOW}Transmission$RESET（PT 下载神器）"
-	echo -e "\n7. $GREEN添加$RESET或$RED删除$RESET设备禁止访问网页$RED黑名单$RESET（针对某个设备禁止访问黑名单中的网页）"
-	echo -e "\n8. $GREEN实时$RESET或$RED定时$YELLOW网络唤醒局域网内设备$RESET"
+	echo -e "2. $RED更新或下载$RESET并$GREEN启动$RESET最新版${YELLOW}Alist$RESET（挂载网盘神器）"
+	echo -e "3. $RED更新或下载$RESET并$GREEN启动$RESET最新版${YELLOW}AdGuardHome$RESET（DNS 去广告神器）"
+	echo -e "4. $RED下载$RESET并$GREEN启动$RESET${YELLOW}Aria2$RESET（经典下载神器）"
+	echo -e "5. $RED下载$RESET并$GREEN启动$RESET${YELLOW}VSFTP$RESET（FTP 服务器搭建神器）"
+	echo -e "6. $RED下载$RESET并$GREEN启动$RESET${YELLOW}Transmission$RESET（PT 下载神器）"
+	echo -e "7. $GREEN添加$RESET或$RED删除$RESET设备禁止访问网页$RED黑名单$RESET（针对某个设备禁止访问黑名单中的网页）"
+	echo -e "8. $GREEN实时$RESET或$RED定时$YELLOW网络唤醒局域网内设备$RESET"
 	echo -e "\n99. $RED$BLINK给作者打赏支持$RESET"
 	echo "---------------------------------------------------------"
 	echo -e "0. 退出$YELLOW小米路由器$GREEN简易安装插件脚本$RESET"
