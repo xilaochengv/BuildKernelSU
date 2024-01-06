@@ -1,4 +1,4 @@
-version=v1.0.4
+version=v1.0.4a
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m'
 hardware_release=$(cat /etc/openwrt_release | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_arch=$(cat /etc/openwrt_release | grep ARCH | awk -F "'" '{print $2}')
@@ -481,19 +481,21 @@ sda_install(){
 			[ -n "$old_tag" ] && {
 				old_tag=$(echo $old_tag | sed 's/[^0-9]//g')
 				new_tag=$(echo $tag_name | sed 's/[^0-9]//g')
-				[ "$old_tag" -ge "$new_tag" ] && echo -e "\n当前已安装最新版 $YELLOW$1 $PINK$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')$RESET ，无需更新！$RESET" && sleep 2
-				echo -e "\n$PINK是否重新下载？$RESET" && downloadnum=""
-				echo "---------------------------------------------------------"
-				echo "1. 重新下载"
-				echo "---------------------------------------------------------"
-				echo "0. 跳过下载"
-				while [ -z "$downloadnum" ];do
-					echo -ne "\n"
-					read -p "请输入对应选项的数字 > " downloadnum
-					[ -n "$(echo $downloadnum | sed 's/[0-9]//g')" -o -z "$downloadnum" ] && downloadnum="" && continue
-					[ "$downloadnum" -gt 1 ] && downloadnum="" && continue
-					[ "$downloadnum" -eq 0 ] && skipdownload=1
-				done
+				[ "$old_tag" -ge "$new_tag" ] && {
+					echo -e "\n当前已安装最新版 $YELLOW$1 $PINK$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')$RESET ，无需更新！$RESET" && sleep 2
+					echo -e "\n$PINK是否重新下载？$RESET" && downloadnum=""
+					echo "---------------------------------------------------------"
+					echo "1. 重新下载"
+					echo "---------------------------------------------------------"
+					echo "0. 跳过下载"
+					while [ -z "$downloadnum" ];do
+						echo -ne "\n"
+						read -p "请输入对应选项的数字 > " downloadnum
+						[ -n "$(echo $downloadnum | sed 's/[0-9]//g')" -o -z "$downloadnum" ] && downloadnum="" && continue
+						[ "$downloadnum" -gt 1 ] && downloadnum="" && continue
+						[ "$downloadnum" -eq 0 ] && skipdownload=1
+					done
+				}
 			}
 			[ -z "$skipdownload" ] && {
 				echo -e "\n$PINK请选择型号进行下载：$RESET" && num=""
