@@ -1,4 +1,4 @@
-version=v1.0.4c
+version=v1.0.4d
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m'
 hardware_release=$(cat /etc/openwrt_release | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_arch=$(cat /etc/openwrt_release | grep ARCH | awk -F "'" '{print $2}')
@@ -759,8 +759,8 @@ sda_install(){
 			[ "$1" = "Alist" ] && echo -e "\n官方使用指南：${SKYBLUE}https://alist.nn.ci/zh/$RESET"
 		else
 			echo -e "\n$RED启动失败！$RESET请下载适用于当前系统的文件包！"
-			[ -f "$downloadfileinit" ] && rm -f $autostartfileinit && log "删除自启动文件$autostartfileinit"
-			[ -L "$downloadfilerc" ] && rm -f $autostartfilerc && log "删除自启动链接文件$autostartfilerc"
+			[ -f "$autostartfileinit" ] && rm -f $autostartfileinit && log "删除自启动文件$autostartfileinit"
+			[ -L "$autostartfilerc" ] && rm -f $autostartfilerc && log "删除自启动链接文件$autostartfilerc"
 			[ -f "$downloadfileinit" ] && rm -f $downloadfileinit && log "删除自启动文件$downloadfileinit"
 			[ -L "$downloadfilerc" ] && rm -f $downloadfilerc && log "删除自启动链接文件$downloadfilerc"
 			[ "$adguardhomednsport" = 53 ] && mv -f /etc/config/dhcp.backup /etc/config/dhcp && /etc/init.d/dnsmasq restart &> /dev/null && log "恢复/etc/config/dhcp.backup文件并改名为dhcp"
