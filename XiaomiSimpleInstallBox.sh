@@ -304,7 +304,7 @@ sdadir_available_check(){
 			[ "$tmpdiravailable" -ge 102400 ] && {
 				echo -e "\n检测到临时目录 $BLUE/tmp$RESET 可用空间为 $RED$(awk BEGIN'{printf "%0.3f MB",'$tmpdiravailable'/1024}')$RESET" && tmpnum=""
 				echo -e "\n$RED临时目录内文件会在路由器重启后丢失！$RESET使用的话每次开机将会自动重新下载主程序文件，是否使用临时目录？" && sleep 1
-				echo -e "\n若使用临时目录一段时间后，重启路由器$YELLOW自动下载失败$RESET则可能是 ${YELLOW}github 加速镜像$RED挂了$RESET，可以运行本脚本重新下载以$GREEN更新开机时的下载地址$RED"
+				echo -e "\n若使用临时目录一段时间后，重启路由器$YELLOW自动下载失败$RESET则可能是 ${YELLOW}github加速镜像 $RED已失效$RESET，届时可以运行本脚本重新下载以$GREEN更新开机时的下载地址$RESET"
 				while [ -z "$tmpnum" ];do
 					echo -ne "\n"
 					read -p "确认使用请输入 1 ，尝试压缩后使用请输入 0 > " tmpnum
