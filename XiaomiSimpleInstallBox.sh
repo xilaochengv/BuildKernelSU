@@ -1,4 +1,4 @@
-version=v1.0.4d
+version=v1.0.5
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m'
 hardware_release=$(cat /etc/openwrt_release | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_arch=$(cat /etc/openwrt_release | grep ARCH | awk -F "'" '{print $2}')
@@ -32,7 +32,7 @@ opkg_test_install(){
 				echo "src/gz openwrt_routing http://downloads.openwrt.org/releases/packages-$hardware_release/$hardware_arch/routing" >> /etc/opkg/distfeeds.conf && log "新建文件/etc/opkg/distfeeds.conf"
 				opkg update
 				[ "$?" = 0 ] && touch /tmp/opkg_updated || {
-					echo -e "\n更新源$RED连接失败$RESET！请检查 $BLUE/etc/opkg/distfeeds.conf$RESET 中的地址是否正确后重试！" && main exit
+					echo -e "\n更新源$RED连接失败$RESET！请检查 $BLUE/etc/opkg/distfeeds.conf$RESET 中的地址是否正确或 ${SKYBLUE}/overlay$RESET 空间是否足够后重试！" && main exit
 				}
 			else
 				touch /tmp/opkg_updated
@@ -124,7 +124,7 @@ opkg_test_install(){
 			[ "$locals" -eq 0 ] && main exit
 			[ "$locals" = 1 ] && locals="YES" || locals="NO"
 		done
-		[ "$locals" = "YES" ] && {		
+		[ "$locals" = "YES" ] && {
 			echo -e "\n$PINK请设置登陆用户名（之前设置过可跳过）：$RESET" && username=""
 			sed -i 's#^ftp:.*#ftp:*:55:55:ftp:/:/bin/false#' /etc/passwd
 			echo "---------------------------------------------------------"
@@ -135,7 +135,7 @@ opkg_test_install(){
 				read -p "请设置登陆用户名（不可带标点符号） > " username
 				[ -n "$(echo $username | sed 's/[0-9a-zA-Z]//g')" -o -z "$username" ] && username="" && continue
 				for tmp in $(cat /etc/passwd | awk -F ':' '{print $1}');do
-					[ "$username" = "$tmp" ] && echo -e "\n用户名 $PINK$username$RESET 已存在！$RED请重新设置！$RESET" && username="" && break 
+					[ "$username" = "$tmp" ] && echo -e "\n用户名 $PINK$username$RESET 已存在！$RED请重新设置！$RESET" && username="" && break
 				done
 			done
 			[ -z "$(echo $username | sed 's/[0-9]//g')" ] && [ "$username" -eq 0 ] && username=""
@@ -393,19 +393,23 @@ firewalllog(){
 	}
 	return 0
 }
-sda_install(){
+sda_install_remove(){
 	sizeneeded=$(echo $4 | grep -oE [0-9]{1,10})
 	[ -n "$(echo $4 | grep MB)" ] && sizeneeded=$(($(echo $4 | grep -oE [0-9]{1,10})*1024))
 	[ -n "$(echo $4 | grep GB)" ] && sizeneeded=$(($(echo $4 | grep -oE [0-9]{1,10})*1024*1024))
-	echo -e "\n$GREEN=========================================================$RESET" && tmpdir="" && old_tag="" && upxretry=0 && skipdownload="" && newuser="" && DNSINFO="" && adguardhomednsport=53
-	echo -e "\n$PINK\t[[  这里以下是 ${YELLOW}$1 $PINK的安装过程  ]]$RESET"
-	echo -e "\n$YELLOW=========================================================$RESET"
-	[ "$1" = "qBittorrent" ] && opkg_test_install unzip
-	[ "$1" = "aria2" ] && opkg_test_install ariang && opkg_test_install aria2
-	[ "$1" = "vsftpd" ] && opkg_test_install vsftpd
-	[ "$1" = "transmission" ] && {
-		opkg_test_install transmission-web
-		[ -n "$(find /usr -name openssl)" ] && opkg_test_install transmission-daemon-openssl || opkg_test_install transmission-daemon-mbedtls
+	autostartfileinit=/etc/init.d/$1 && autostartfilerc=/etc/rc.d/S95$1 && downloadfileinit=/etc/init.d/Download$1 && downloadfilerc=/etc/rc.d/S95Download$1 && tmpdir="" && old_tag="" && upxretry=0 && skipdownload="" && newuser="" && DNSINFO="" && adguardhomednsport=53
+	[ "$3" = "del" ] && del="true" || del=""
+	[ -z "$del" ] && {
+		echo -e "\n$GREEN=========================================================$RESET"
+		echo -e "\n$PINK\t[[  这里以下是 ${YELLOW}$1 $PINK的安装过程  ]]$RESET"
+		echo -e "\n$YELLOW=========================================================$RESET"
+		[ "$1" = "qBittorrent" ] && opkg_test_install unzip
+		[ "$1" = "aria2" ] && opkg_test_install ariang && opkg_test_install aria2
+		[ "$1" = "vsftpd" ] && opkg_test_install vsftpd
+		[ "$1" = "transmission" ] && {
+			opkg_test_install transmission-web
+			[ -n "$(find /usr -name openssl)" ] && opkg_test_install transmission-daemon-openssl || opkg_test_install transmission-daemon-mbedtls
+		}
 	}
 	for tmplist in $sdalist;do
 		sdadir=$(find $tmplist -name $2)
@@ -419,39 +423,64 @@ sda_install(){
 		[ -f "$sdadir" -a -n "$(echo $name | grep -v '\.d')" -o -L "$sdadir" -a -n "$(echo $name | grep -v '\.d')" ] && break || sdadir=""
 	done
 	if [ -z "$sdadir" ];then
-		echo -e "\n$PINK请选择下载保存路径：$RESET" && listcount="" && num=""
-		echo "---------------------------------------------------------"
-		echo -e "${GREEN}ID\t$SKYBLUE剩余可用空间\t\t$BLUE可选路径$RESET"
-		for tmp in $sdalist;do
-			let listcount++
-			available=$(df | grep " $tmp$" | awk '{print $4}')
-			if [ "$available" -lt 1048576 ];then
-				available="$RED$(awk BEGIN'{printf "%0.3f MB",'$available'/1024}')$RESET"
-			elif [ "$available" -lt 10485760 ];then
-				available="$YELLOW$(awk BEGIN'{printf "%0.3f GB",'$available'/1024/1024}')$RESET"
-			else
-				available="$GREEN$(awk BEGIN'{printf "%0.3f GB",'$available'/1024/1024}')$RESET"
-			fi
-			echo -e "$listcount.\t$available     \t\t$tmp"
-		done
-		echo "---------------------------------------------------------"
-		echo -e "0.\t返回主页面"
-		while [ -z "$num" ];do
-			echo -ne "\n"
-			read -p "请输入对应目录的数字 > " num
-			[ -n "$(echo $num | sed 's/[0-9]//g')" -o -z "$num" ] && num="" && continue
-			[ "$num" -gt $listcount ] && num="" && continue
-			[ "$num" -eq 0 ] && main exit
-			sdadir=$(echo $sdalist | awk '{print $'$num'}')/$1 && sdadir_available_check "$1" "$2" "$sizeneeded"
-		done
+		if [ -z "$del" ];then
+			echo -e "\n$PINK请选择下载保存路径：$RESET" && listcount="" && num=""
+			echo "---------------------------------------------------------"
+			echo -e "${GREEN}ID\t$SKYBLUE剩余可用空间\t\t$BLUE可选路径$RESET"
+			for tmp in $sdalist;do
+				let listcount++
+				available=$(df | grep " $tmp$" | awk '{print $4}')
+				if [ "$available" -lt 1048576 ];then
+					available="$RED$(awk BEGIN'{printf "%0.3f MB",'$available'/1024}')$RESET"
+				elif [ "$available" -lt 10485760 ];then
+					available="$YELLOW$(awk BEGIN'{printf "%0.3f GB",'$available'/1024/1024}')$RESET"
+				else
+					available="$GREEN$(awk BEGIN'{printf "%0.3f GB",'$available'/1024/1024}')$RESET"
+				fi
+				echo -e "$listcount.\t$available     \t\t$tmp"
+			done
+			echo "---------------------------------------------------------"
+			echo -e "0.\t返回主页面"
+			while [ -z "$num" ];do
+				echo -ne "\n"
+				read -p "请输入对应目录的数字 > " num
+				[ -n "$(echo $num | sed 's/[0-9]//g')" -o -z "$num" ] && num="" && continue
+				[ "$num" -gt $listcount ] && num="" && continue
+				[ "$num" -eq 0 ] && main exit
+				sdadir=$(echo $sdalist | awk '{print $'$num'}')/$1 && sdadir_available_check "$1" "$2" "$sizeneeded"
+			done
+		else
+			echo -e "\n$RED没有找到 $YELLOW$1 $RED的安装路径！若是通过 opkg 安装的即将通过 opkg 进行卸载$RESET" && sleep 2
+		fi
 	else
 		sdadir=${sdadir%/*}
-		old_tag=$(eval $sdadir/$2 $3 2> /dev/null | sed 's/.*v/v/');[ -n "$7" ] && $7
-		[ -n "$old_tag" ] && \
-		echo -e "\n找到 $YELLOW$1 $PINK$old_tag$RESET 的安装路径：$BLUE$sdadir$RESET" || \
-		echo -e "\n找到 $YELLOW$1$RESET 的安装路径：$BLUE$sdadir$RESET"
+		[ -z "$del" ] && old_tag=$(eval $sdadir/$2 $3 2> /dev/null | sed 's/.*v/v/');[ -n "$7" ] && $7
+		[ -n "$old_tag" ] && echo -e "\n找到 $YELLOW$1 $PINK$old_tag$RESET 的安装路径：$BLUE$sdadir$RESET" || echo -e "\n找到 $YELLOW$1$RESET 的安装路径：$BLUE$sdadir$RESET"
 		sleep 2
 	fi
+	[ -n "$del" ] && {
+		firewalllog "del" "$1" && $autostartfileinit stop &> /dev/null
+		[ -n "$ruleexist" ] && echo -e "\n$YELLOW$1$RESET 端口转发规则 $RED已全部删除$RESET，即将重启防火墙 ······" && sleep 2 && /etc/init.d/firewall restart &> /dev/null
+		[ "$1" = "qBittorrent" ] && opkg remove unzip &> /dev/null
+		[ "$1" = "AdGuardHome" ] && [ -f /etc/config/dhcp.backup ] && mv -f /etc/config/dhcp.backup /etc/config/dhcp && /etc/init.d/dnsmasq restart &> /dev/null && log "恢复/etc/config/dhcp.backup文件并改名为dhcp"
+		[ "$1" = "aria2" ] && rm -rf /www/ariang && opkg remove ariang aria2 &> /dev/null
+		[ "$1" = "vsftpd" ] && rm -f /etc/vsftpd.conf && opkg remove vsftpd &> /dev/null && [ -f /etc/services.backup ] && mv -f /etc/services.backup /etc/services && log "恢复/etc/services.backup文件并改名为services"
+		[ "$1" = "transmission" ] && rm -rf /etc/config/transmission /usr/share/transmission/ && opkg remove transmission-web transmission-daemon-openssl transmission-daemon-mbedtls libnatpmp libminiupnpc &> /dev/null
+		[ "$1" = "设备禁止访问网页黑名单" ] && {
+			iptables -D FORWARD -i br-lan -j DOMAIN_REJECT_RULE &> /dev/null
+			iptables -F DOMAIN_REJECT_RULE &> /dev/null
+			iptables -X DOMAIN_REJECT_RULE &> /dev/null
+			[ -f /etc/domainblacklist ] && rm -f /etc/domainblacklist && log "删除文件/etc/domainblacklist"
+			sed -i '/domainblacklist/d' /etc/crontabs/root && /etc/init.d/cron restart &> /dev/null
+		}
+		[ "$1" = "wakeonlan" ] && rm -rf /usr/share/perl /usr/lib/perl5/ && opkg remove wakeonlan perlbase-net perlbase-time perlbase-dynaloader perlbase-filehandle perlbase-class perlbase-getopt perlbase-io perlbase-socket perlbase-selectsaver perlbase-symbol perlbase-scalar perlbase-posix perlbase-tie perlbase-list perlbase-fcntl perlbase-xsloader perlbase-errno perlbase-bytes perlbase-base perlbase-essential perlbase-config perl &> /dev/null && sed -i '/网络唤醒/d' /etc/crontabs/root && /etc/init.d/cron restart &> /dev/null
+		[ -f "$autostartfileinit" ] && rm -f $autostartfileinit && log "删除自启动文件$autostartfileinit"
+		[ -L "$autostartfilerc" ] && rm -f $autostartfilerc && log "删除自启动链接文件$autostartfilerc"
+		[ -f "$downloadfileinit" ] && rm -f $downloadfileinit && log "删除自启动文件$downloadfileinit"
+		[ -L "$downloadfilerc" ] && rm -f $downloadfilerc && log "删除自启动链接文件$downloadfilerc"
+		[ -n "$sdadir" ] && rm -rf $sdadir && log "删除文件夹$sdadir"
+		echo -e "\n$YELLOW$1 $RED已一键删除！$RESET" && main exit
+	}
 	if [ -z "$(echo $1 | grep -oE 'aria2|vsftpd|transmission')" ];then
 		[ -z "$upxretry" -o "$upxretry" -eq 0 ] && {
 			urls="https://github.com/$5/$6/releases/latest"
@@ -515,33 +544,17 @@ sda_install(){
 					echo -ne "\n"
 					read -p "请输入对应型号的数字或直接输入以 http 或 ftp 开头的下载地址 > " num
 						case "$num" in
-						1)
-							hardware_type=$(uname -m)
-							[ "$hardware_type" = "aarch64" ] && hardware_type=arm64
-							;;
-						2)
-							hardware_type=arm64
-							;;
-						3)
-							hardware_type=arm
-							;;
-						4)
-							hardware_type=mips
-							;;
-						5)
-							hardware_type=mips64
-							;;
-						6)
-							hardware_type=mips64le
-							;;
-						7)
-							hardware_type=mipsle
-							;;
-						8)
-							hardware_type=amd64
-							;;
-						0)
-							main exit
+							1)
+								hardware_type=$(uname -m)
+								[ "$hardware_type" = "aarch64" ] && hardware_type=arm64;;
+							2)	hardware_type=arm64;;
+							3)	hardware_type=arm;;
+							4)	hardware_type=mips;;
+							5)	hardware_type=mips64;;
+							6)	hardware_type=mips64le;;
+							7)	hardware_type=mipsle;;
+							8)	hardware_type=amd64;;
+							0)	main exit
 						esac
 					[ -n "$(echo $num | sed 's/[0-9]//g')" -a "${num:0:4}" != "http" -a "${num:0:3}" != "ftp" -o -z "$num" ] && num="" && continue
 					[ "${num:0:4}" != "http" -a "${num:0:3}" != "ftp" ] && [ "$num" -lt 1 -o "$num" -gt 8 ] && num="" && continue
@@ -575,14 +588,9 @@ sda_install(){
 				[ ! -f /tmp/$1.tmp ] && echo -e "\n$RED下载失败！$RESET如果没有代理的话建议多尝试几次！" && main exit
 				echo -e "\n$GREEN下载成功！$RESET即将解压安装并启动" && rm -f /tmp/$2
 				case "$1" in
-					qBittorrent)
-						unzip -oq /tmp/$1.tmp -d /tmp
-						;;
-					Alist)
-						tar -zxf /tmp/$1.tmp -C /tmp
-						;;
-					AdGuardHome)						
-						tar -zxf /tmp/AdGuardHome.tmp -C /tmp && mv -f /tmp/$1 /tmp/$1.dir && mv -f /tmp/$1.dir/$1 /tmp/$1 && rm -rf /tmp/$1.dir
+					qBittorrent)	unzip -oq /tmp/$1.tmp -d /tmp;;
+					Alist)	tar -zxf /tmp/$1.tmp -C /tmp;;
+					AdGuardHome)	tar -zxf /tmp/AdGuardHome.tmp -C /tmp && mv -f /tmp/$1 /tmp/$1.dir && mv -f /tmp/$1.dir/$1 /tmp/$1 && rm -rf /tmp/$1.dir
 				esac
 				rm -f /tmp/$1.tmp
 			}
@@ -707,8 +715,7 @@ sda_install(){
 			fi
 			$sdadir/$2 -w $sdadir &> /dev/null &
 		}
-		runtimecount=0 && autostartfileinit=/etc/init.d/$1 && autostartfilerc=/etc/rc.d/S95$1 && downloadfileinit=/etc/init.d/Download$1 && downloadfilerc=/etc/rc.d/S95Download$1
-		[ -z "$tmpdir" ] && {
+		runtimecount=0 && [ -z "$tmpdir" ] && {
 			[ -f "$downloadfileinit" ] && rm -f $downloadfileinit && log "删除自启动文件$downloadfileinit"
 			[ -L "$downloadfilerc" ] && rm -f $downloadfilerc && log "删除自启动链接文件$downloadfilerc"
 		}
@@ -794,8 +801,8 @@ sda_install(){
 				if [ "$?" = 0 ];then
 					echo -e "\n$GREEN下载成功！$RESET即将解压安装"
 					tar -zxf /tmp/transmission-webUI.tmp -C /tmp
-					mv -f /usr/share/transmission/web/index.html /usr/share/transmission/web/index.original.html && log "文件/usr/share/transmission/web/index.html改名为index.original.html"
-					mv -f /tmp/transmission-web-control-master/src/* /usr/share/transmission/web/ && log "$1第三方加强版Web-UI文件已安装到/usr/share/transmission/web/"
+					mv -f /usr/share/transmission/web/index.html /usr/share/transmission/web/index.original.html
+					mv -f /tmp/transmission-web-control-master/src/* /usr/share/transmission/web/
 					rm -rf /tmp/$1-webUI.tmp /tmp/transmission-web-control-master
 				else
 					echo -e "\n$RED下载失败！目前仅能使用原版 Web-UI"
@@ -870,7 +877,7 @@ domainblacklist_update(){
 		echo -e "\n$SKYBLUE$devmac$GREEN$devname$YELLOW当前已添加网页黑名单：$RESET"
 		echo "---------------------------------------------------------"
 		sed -n /$devmac/p /etc/domainblacklist | awk '{print NR":'$SKYBLUE'\t"$2"'$RESET'"}'
-		echo "---------------------------------------------------------"	
+		echo "---------------------------------------------------------"
 	}
 	[ "$1" = "reload" ] && /etc/domainblacklist "reload"
 	return 0
@@ -892,110 +899,119 @@ main(){
 	echo -e "8. $GREEN实时$RESET或$RED定时$YELLOW网络唤醒局域网内设备$RESET"
 	echo -e "\n99. $RED$BLINK给作者打赏支持$RESET"
 	echo "---------------------------------------------------------"
+	echo -e "del+ID. 一键删除对应选项插件 如：${YELLOW}del1$RESET"
 	echo -e "0. 退出$YELLOW小米路由器$GREEN简易安装插件脚本$RESET"
 	while [ -z "$num" ];do
 		echo -ne "\n"
 		read -p "请输入对应选项的数字 > " num
 		case "$num" in
-		1)
-			sda_install "qBittorrent" "qbittorrent-nox" "-v" "30MB" "c0re100" "qBittorrent-Enhanced-Edition" "rm -rf /.cache /.config /.local" 
-			;;
-		2)
-			sda_install "Alist" "alist" "version | grep v" "64MB" "alist-org" "alist"
-			;;
-		3)
-			sda_install "AdGuardHome" "AdGuardHome" "--version" "30MB" "AdGuardTeam" "AdGuardHome"
-			;;
-		4)
-			sda_install "aria2" "aria2.conf" "aria2c" "30KB"
-			;;
-		5)
-			sda_install "vsftpd"
-			;;
-		6)
-			sda_install "transmission" "settings.json" "transmission-daemon" "5KB"
-			;;
-		7)
-			echo -e "\n$PINK请选择需要操作的设备：$RESET" && devnum="" && domain=""
-			echo "---------------------------------------------------------"
-			if [ -f /tmp/dhcp.leases ];then
-				echo -e "${GREEN}ID\t$SKYBLUE设备 MAC 地址\t\t$PINK设备 IP 地址\t$GREEN设备名称$RESET"
-				cat /tmp/dhcp.leases | awk '{print NR":'$SKYBLUE'\t"$2"'$PINK'\t"$3"'$GREEN'\t"$4"'$RESET'"}'
-			else
-				echo -e "$RED获取设备列表失败！请手动输入 MAC 地址进行继续$RESET"
-			fi
-			echo -e "255.\t$SKYBLUE手动输入 MAC 地址$RESET"
-			echo "---------------------------------------------------------"
-			echo -e "0.\t返回主页面"
-			while [ -z "$devnum" ];do
-				echo -ne "\n"
-				read -p "请输入对应设备的数字 > " devnum
-				[ -n "$(echo $devnum | sed 's/[0-9]//g')" -o -z "$devnum" ] && devnum="" && continue
-				if [ -f /tmp/dhcp.leases ];then
-					[ "$devnum" -gt $(cat /tmp/dhcp.leases | wc -l) -a "$devnum" != 255 ] && devnum="" && continue
-				else
-					[ "$devnum" != 255 ] && devnum="" && continue
-				fi
-				[ "$devnum" -eq 0 ] && main exit
-			done
-			devmac=$(sed -n ${devnum}p /tmp/dhcp.leases 2> /dev/null | awk '{print $2}')
-			devname=" $(sed -n ${devnum}p /tmp/dhcp.leases 2> /dev/null | awk '{print $4}') "
-			[ "$devnum" = 255 ] && {
-				echo -e "\n$PINK请输入 xx:xx:xx:xx:xx:xx 格式的 MAC 地址：$RESET" && devmac=""
+			1)	sda_install_remove "qBittorrent" "qbittorrent-nox" "-v" "30MB" "c0re100" "qBittorrent-Enhanced-Edition" "rm -rf /.cache /.config /.local";;
+			2)	sda_install_remove "Alist" "alist" "version | grep v" "64MB" "alist-org" "alist";;
+			3)	sda_install_remove "AdGuardHome" "AdGuardHome" "--version" "30MB" "AdGuardTeam" "AdGuardHome";;
+			4)	sda_install_remove "aria2" "aria2.conf" "aria2c" "30KB";;
+			5)	sda_install_remove "vsftpd";;
+			6)	sda_install_remove "transmission" "settings.json" "transmission-daemon" "5KB";;
+			7)
+				echo -e "\n$PINK请选择需要操作的设备：$RESET" && devnum="" && domain=""
 				echo "---------------------------------------------------------"
-				while [ -z "$devmac" ];do
+				if [ -f /tmp/dhcp.leases ];then
+					echo -e "${GREEN}ID\t$SKYBLUE设备 MAC 地址\t\t$PINK设备 IP 地址\t$GREEN设备名称$RESET"
+					cat /tmp/dhcp.leases | awk '{print NR":'$SKYBLUE'\t"$2"'$PINK'\t"$3"'$GREEN'\t"$4"'$RESET'"}'
+				else
+					echo -e "$RED获取设备列表失败！请手动输入 MAC 地址进行继续$RESET"
+				fi
+				echo -e "255.\t$SKYBLUE手动输入 MAC 地址$RESET"
+				echo "---------------------------------------------------------"
+				echo -e "0.\t返回主页面"
+				while [ -z "$devnum" ];do
 					echo -ne "\n"
-					read -p "请输入 xx:xx:xx:xx:xx:xx 格式的 MAC 地址 > " devmac
-					devmac=$(echo $devmac | awk '{print tolower($0)}')
-					[ -z "$devmac" ] && continue
-					[ "$devmac" = 0 ] && main exit
-					[ -z "$(echo $devmac |grep -E '^([0-9a-f][02468ace])(([:]([0-9a-f]{2})){5})$')" ] && echo -e "\n$RED输入错误！请重新输入！$RESET" && devmac="" && continue
-				done
-			}
-			echo -e "\n$PINK请输入要添加的网页地址或网页地址包含的关键字（如 ${SKYBLUE}www.baidu.com $PINK或 ${SKYBLUE}baidu.com $PINK或 ${SKYBLUE}baidu$PINK）：$RESET"
-			echo "---------------------------------------------------------"
-			echo -e "0.\t返回主页面" && domainblacklist_update
-			[ ! -f /etc/domainblacklist -o -z "$(sed -n 1p /etc/domainblacklist 2> /dev/null | grep reload)" ] && echo -e "reload(){\n\tiptables -D FORWARD -i br-lan -j DOMAIN_REJECT_RULE &> /dev/null\n\tiptables -F DOMAIN_REJECT_RULE &> /dev/null\n\tiptables -X DOMAIN_REJECT_RULE &> /dev/null\n\tiptables -N DOMAIN_REJECT_RULE\n\tiptables -I FORWARD -i br-lan -j DOMAIN_REJECT_RULE\n\tsed -n 15,\$\$p /etc/domainblacklist | while read LINE;do\n\t\tiptables -A DOMAIN_REJECT_RULE -m mac --mac-source \${LINE:1:18} -m string --string \"\${LINE:19:\$\$}\" --algo bm -j REJECT\n\tdone\n}\ndomain_rule_check(){\n\t[ -z \"\$(iptables -S FORWARD | grep -e -i | head -1 | grep DOMAIN)\" ] && reload\n}\n[ \"\$1\" = \"reload\" ] && reload || domain_rule_check" > /etc/domainblacklist && log "新建文件/etc/domainblacklist" && chmod 755 /etc/domainblacklist
-			[ -z "$(grep domainblacklist /etc/crontabs/root)" ] && echo "*/1 * * * * /etc/domainblacklist" >> /etc/crontabs/root && /etc/init.d/cron restart &> /dev/null && log "添加定时任务domainblacklist到/etc/crontabs/root文件中"
-			[ -n "$(grep $devmac /etc/domainblacklist)" ] && echo -e "$PINK删除请输入 ${YELLOW}-ID $PINK，如：${YELLOW}-2$PINK 删除第二条已添加网页黑名单$RESET"
-			while [ -z "$domain" ];do
-				echo -ne "\n"
-				read -p "请输入要过滤的网页地址或网页地址包含的关键字 > " domain
-				[ -z "$domain" ] && continue
-				[ "$domain" = 0 ] && main exit
-				[ "${domain:0:1}" = "-" ] && {
-					[ -n "$(echo ${domain:1:$$} | sed 's/[0-9]//g')" -o -z "$(grep $devmac /etc/domainblacklist 2> /dev/null)" ] && echo -e "\n$RED输入错误！请重新输入！$RESET" && domain="" && continue
-					domainrule=$(grep $devmac /etc/domainblacklist | awk '{print $2}' | sed -n ${domain:1:$$}p | sed 's/#//')
-					if [ -n "$domainrule" ];then
-						sed -i "/$devmac $domainrule$/d" /etc/domainblacklist
-						echo -e "\n$SKYBLUE$devmac$GREEN$devname$YELLOW网页黑名单规则 $SKYBLUE$domainrule $RED已删除！$RESET" && sleep 1 && domainblacklist_update "reload" && domain="" && continue
+					read -p "请输入对应设备的数字 > " devnum
+					[ -n "$(echo $devnum | sed 's/[0-9]//g')" -o -z "$devnum" ] && devnum="" && continue
+					if [ -f /tmp/dhcp.leases ];then
+						[ "$devnum" -gt $(cat /tmp/dhcp.leases | wc -l) -a "$devnum" != 255 ] && devnum="" && continue
 					else
-						echo -e "\n$RED输入错误！请重新输入！$RESET" && domain="" && continue
+						[ "$devnum" != 255 ] && devnum="" && continue
 					fi
+					[ "$devnum" -eq 0 ] && main exit
+				done
+				devmac=$(sed -n ${devnum}p /tmp/dhcp.leases 2> /dev/null | awk '{print $2}')
+				devname=" $(sed -n ${devnum}p /tmp/dhcp.leases 2> /dev/null | awk '{print $4}') "
+				[ "$devnum" = 255 ] && {
+					echo -e "\n$PINK请输入 xx:xx:xx:xx:xx:xx 格式的 MAC 地址：$RESET" && devmac=""
+					echo "---------------------------------------------------------"
+					while [ -z "$devmac" ];do
+						echo -ne "\n"
+						read -p "请输入 xx:xx:xx:xx:xx:xx 格式的 MAC 地址 > " devmac
+						devmac=$(echo $devmac | awk '{print tolower($0)}')
+						[ -z "$devmac" ] && continue
+						[ "$devmac" = 0 ] && main exit
+						[ -z "$(echo $devmac |grep -E '^([0-9a-f][02468ace])(([:]([0-9a-f]{2})){5})$')" ] && echo -e "\n$RED输入错误！请重新输入！$RESET" && devmac="" && continue
+					done
 				}
-				[ -n "$(grep -E "$devmac.*$domain$" /etc/domainblacklist)" ] && echo -e "\n$SKYBLUE$devmac$GREEN$devname$YELLOW网页黑名单规则 $SKYBLUE$domain $RED已存在！$RESET" && sleep 1 && domainblacklist_update && domain="" && continue
-				echo "#$devmac $domain" >> /etc/domainblacklist
-				echo -e "\n$SKYBLUE$devmac$GREEN$devname$YELLOW网页黑名单规则 $SKYBLUE$domain $GREEN添加成功！$RESET" && sleep 1 && domainblacklist_update "reload" && domain=""
-			done
-			;;
-		8)
-			opkg_test_install "wakeonlan"
-			;;
-		99)
-			echo -e "\n$RED$BLINK十分感谢您的支持！！！！！！！！$RESET\n\n$YELLOW微信扫码：$RESET\n"
-			echo H4sIAAAAAAAAA71UwQ3DMAj8d4oblQcPJuiAmaRSHMMZYzcvS6hyXAPHcXB97Tpon5PJcj5cX2XDfS3wL2mW3i38FhkMwHNqoaSb9YP291p7rSInTCneDRugbLr0q7uhlbX7lkUwxxVsfctaMMW/2a87YPD01e+yGiF6onHq/MAvlFwGUO2AMW7VFwODFGolOMBToaU6d1UEAYwp+jtCN9dxdsppCr4Q4N0F5EbiEiKS/P5MRupGKMGIFp4Jv8jv1lzNyiLMg3QcEc03CMI6U70PImYSU9d2nhxLttkkYKF01fZ/Q9n6Cvu0D1i7gd1rYQZjG2ynYrtL5md8r5P7C7YO2PF8PwRFQamaBwAA | base64 -d | gzip -d
-			echo -e "\n$YELLOW支付宝扫码：$RESET\n"
-			echo H4sIAAAAAAAAA71USQ7EMAi7zyv8VA4c8oI+sC8ZqQ3gLNC5TCVUKSlgsAnn0c4X7fMm2IyH81A2XNf3wb0Et2d4J3EJQgMog/Rw0Pn66uKdZyRsO3tJYp5qaEij9hrozpolV662nz17EV1igVgQUBPEDQy7Owh+6sYLE+4DlF24I2VYLJVKgRQRzpG1EyJdhYPhB7Wq/K2zINwLaM44w9wKT0mlhmSMjeKLN+Uj5koGuSlKIyBnKtA34yBLaJthCu1nFVkmUy6YtKEEHjRJ94D6NIxyBFFtXABJ9mEbCFV8/xD/qKPV72G3B+Ak82PtzCB21jQCT296tz/WFcESrZeTQ/4u/mqv430B27+RdoQHAAA= | base64 -d | gzip -d && exit
-			;;
-		0)
-			echo -e "\n$GREEN=========================================================$RESET"
-			echo -e "\n$PINK\t[[  已退出小米路由器简易安装插件脚本  ]]$RESET"
-			echo -e "\n$RED=========================================================$RESET"
-			echo -e "\n感谢使用$YELLOW小米路由器$GREEN简易安装插件脚本 $PINK$version$RESET ，觉得好用希望能够$RED$BLINK打赏支持~！$RESET"
-			echo -e "\n您的小小支持是我持续更新的动力~~~$RED$BLINK十分感谢~ ~ ~ ! ! !$RESET"
-			echo -e "\n$YELLOW打赏地址：${SKYBLUE}https://github.com/xilaochengv/BuildKernelSU$RESET 或$RED$BLINK主页面输入：99$RESET"
-			echo -e "\n$GREEN问题反馈：${SKYBLUE}https://www.right.com.cn/forum/thread-8322811-1-1.html$RESET"
-			echo -e "\n$RED=========================================================$RESET" && exit
+				echo -e "\n$PINK请输入要添加的网页地址或网页地址包含的关键字（如 ${SKYBLUE}www.baidu.com $PINK或 ${SKYBLUE}baidu.com $PINK或 ${SKYBLUE}baidu$PINK）：$RESET"
+				echo "---------------------------------------------------------"
+				echo -e "0.\t返回主页面" && domainblacklist_update
+				[ ! -f /etc/domainblacklist -o -z "$(sed -n 1p /etc/domainblacklist 2> /dev/null | grep reload)" ] && echo -e "reload(){\n\tiptables -D FORWARD -i br-lan -j DOMAIN_REJECT_RULE &> /dev/null\n\tiptables -F DOMAIN_REJECT_RULE &> /dev/null\n\tiptables -X DOMAIN_REJECT_RULE &> /dev/null\n\tiptables -N DOMAIN_REJECT_RULE\n\tiptables -I FORWARD -i br-lan -j DOMAIN_REJECT_RULE\n\tsed -n 15,\$\$p /etc/domainblacklist | while read LINE;do\n\t\tiptables -A DOMAIN_REJECT_RULE -m mac --mac-source \${LINE:1:18} -m string --string \"\${LINE:19:\$\$}\" --algo bm -j REJECT\n\tdone\n}\ndomain_rule_check(){\n\t[ -z \"\$(iptables -S FORWARD | grep -e -i | head -1 | grep DOMAIN)\" ] && reload\n}\n[ \"\$1\" = \"reload\" ] && reload || domain_rule_check" > /etc/domainblacklist && log "新建文件/etc/domainblacklist" && chmod 755 /etc/domainblacklist
+				[ -z "$(grep domainblacklist /etc/crontabs/root)" ] && echo "*/1 * * * * /etc/domainblacklist" >> /etc/crontabs/root && /etc/init.d/cron restart &> /dev/null && log "添加定时任务domainblacklist到/etc/crontabs/root文件中"
+				[ -n "$(grep $devmac /etc/domainblacklist)" ] && echo -e "$PINK删除请输入 ${YELLOW}-ID $PINK，如：${YELLOW}-2$PINK 删除第二条已添加网页黑名单$RESET"
+				while [ -z "$domain" ];do
+					echo -ne "\n"
+					read -p "请输入要过滤的网页地址或网页地址包含的关键字 > " domain
+					[ -z "$domain" ] && continue
+					[ "$domain" = 0 ] && main exit
+					[ "${domain:0:1}" = "-" ] && {
+						[ -n "$(echo ${domain:1:$$} | sed 's/[0-9]//g')" -o -z "$(grep $devmac /etc/domainblacklist 2> /dev/null)" ] && echo -e "\n$RED输入错误！请重新输入！$RESET" && domain="" && continue
+						domainrule=$(grep $devmac /etc/domainblacklist | awk '{print $2}' | sed -n ${domain:1:$$}p | sed 's/#//')
+						if [ -n "$domainrule" ];then
+							sed -i "/$devmac $domainrule$/d" /etc/domainblacklist
+							echo -e "\n$SKYBLUE$devmac$GREEN$devname$YELLOW网页黑名单规则 $SKYBLUE$domainrule $RED已删除！$RESET" && sleep 1 && domainblacklist_update "reload" && domain="" && continue
+						else
+							echo -e "\n$RED输入错误！请重新输入！$RESET" && domain="" && continue
+						fi
+					}
+					[ -n "$(grep -E "$devmac.*$domain$" /etc/domainblacklist)" ] && echo -e "\n$SKYBLUE$devmac$GREEN$devname$YELLOW网页黑名单规则 $SKYBLUE$domain $RED已存在！$RESET" && sleep 1 && domainblacklist_update && domain="" && continue
+					echo "#$devmac $domain" >> /etc/domainblacklist
+					echo -e "\n$SKYBLUE$devmac$GREEN$devname$YELLOW网页黑名单规则 $SKYBLUE$domain $GREEN添加成功！$RESET" && sleep 1 && domainblacklist_update "reload" && domain=""
+				done;;
+			8)	opkg_test_install "wakeonlan";;
+			99)
+				echo -e "\n$RED$BLINK十分感谢您的支持！！！！！！！！$RESET\n\n$YELLOW微信扫码：$RESET\n"
+				echo H4sIAAAAAAAAA71UwQ3DMAj8d4oblQcPJuiAmaRSHMMZYzcvS6hyXAPHcXB97Tpon5PJcj5cX2XDfS3wL2mW3i38FhkMwHNqoaSb9YP291p7rSInTCneDRugbLr0q7uhlbX7lkUwxxVsfctaMMW/2a87YPD01e+yGiF6onHq/MAvlFwGUO2AMW7VFwODFGolOMBToaU6d1UEAYwp+jtCN9dxdsppCr4Q4N0F5EbiEiKS/P5MRupGKMGIFp4Jv8jv1lzNyiLMg3QcEc03CMI6U70PImYSU9d2nhxLttkkYKF01fZ/Q9n6Cvu0D1i7gd1rYQZjG2ynYrtL5md8r5P7C7YO2PF8PwRFQamaBwAA | base64 -d | gzip -d
+				echo -e "\n$YELLOW支付宝扫码：$RESET\n"
+				echo H4sIAAAAAAAAA71USQ7EMAi7zyv8VA4c8oI+sC8ZqQ3gLNC5TCVUKSlgsAnn0c4X7fMm2IyH81A2XNf3wb0Et2d4J3EJQgMog/Rw0Pn66uKdZyRsO3tJYp5qaEij9hrozpolV662nz17EV1igVgQUBPEDQy7Owh+6sYLE+4DlF24I2VYLJVKgRQRzpG1EyJdhYPhB7Wq/K2zINwLaM44w9wKT0mlhmSMjeKLN+Uj5koGuSlKIyBnKtA34yBLaJthCu1nFVkmUy6YtKEEHjRJ94D6NIxyBFFtXABJ9mEbCFV8/xD/qKPV72G3B+Ak82PtzCB21jQCT296tz/WFcESrZeTQ/4u/mqv430B27+RdoQHAAA= | base64 -d | gzip -d && exit;;
+			del[1-8])
+				case "${num:3:1}" in
+					1)	plugin="qBittorrent";pluginfile="qbittorrent-nox";;
+					2)	plugin="Alist";pluginfile="alist";;
+					3)	plugin="AdGuardHome";pluginfile="AdGuardHome";;
+					4)	plugin="aria2";pluginfile="aria2.conf";;
+					5)	plugin="vsftpd";pluginfile=".notexist";;
+					6)	plugin="transmission";pluginfile="settings.json";;
+					7)	plugin="设备禁止访问网页黑名单";pluginfile=".notexist";;
+					8)	plugin="wakeonlan";pluginfile=".notexist"
+				esac
+				echo -e "\n$PINK确认一键卸载 $plugin 吗？（若确认所有配置文件将会全部删除）$RESET" && num=""
+				echo "---------------------------------------------------------"
+				echo "1. 确认卸载"
+				echo "---------------------------------------------------------"
+				echo "0. 返回主页面"
+				while [ -z "$num" ];do
+					echo -ne "\n"
+					read -p "请输入对应选项的数字 > " num
+					[ -n "$(echo $num | sed 's/[0-9]//g')" -o -z "$num" ] && num="" && continue
+					[ "$num" -gt 1 ] && num="" && continue
+					[ "$num" -eq 0 ] && main
+					sda_install_remove "$plugin" "$pluginfile" "del"
+				done;;
+			0)
+				echo -e "\n$GREEN=========================================================$RESET"
+				echo -e "\n$PINK\t[[  已退出小米路由器简易安装插件脚本  ]]$RESET"
+				echo -e "\n$RED=========================================================$RESET"
+				echo -e "\n感谢使用$YELLOW小米路由器$GREEN简易安装插件脚本 $PINK$version$RESET ，觉得好用希望能够$RED$BLINK打赏支持~！$RESET"
+				echo -e "\n您的小小支持是我持续更新的动力~~~$RED$BLINK十分感谢~ ~ ~ ! ! !$RESET"
+				echo -e "\n$YELLOW打赏地址：${SKYBLUE}https://github.com/xilaochengv/BuildKernelSU$RESET 或$RED$BLINK主页面输入：99$RESET"
+				echo -e "\n$GREEN问题反馈：${SKYBLUE}https://www.right.com.cn/forum/thread-8322811-1-1.html$RESET"
+				echo -e "\n$RED=========================================================$RESET" && exit
 		esac
 		[ -n "$(echo $num | sed 's/[0-9]//g')" -o -z "$num" ] && num="" && continue
 		[ "$num" -lt 1	-o "$num" -gt 8 ] && num=""
