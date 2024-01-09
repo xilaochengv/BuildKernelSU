@@ -1,4 +1,4 @@
-version=v1.0.5
+version=v1.0.5a
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m'
 hardware_release=$(cat /etc/openwrt_release | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_arch=$(cat /etc/openwrt_release | grep ARCH | awk -F "'" '{print $2}')
@@ -77,7 +77,7 @@ opkg_test_install(){
 					[ "$cnum" -gt 1 ] && cnum="" && continue
 					[ "$cnum" -eq 0 ] && ftpnum=""
 				done
-				process=$(netstat -lnWp | grep ":$ftpnum " | awk '{print $NF}' | sed 's/.*\///' | head -1)
+				process=$(netstat -lnWp | grep tcp | grep ":$ftpnum " | awk '{print $NF}' | sed 's/.*\///' | head -1)
 				[ -n "$process" -a "$process" != "$1" ] && echo -e "\n$RED检测到 $PINK$ftpnum $RED端口已被 $YELLOW$process $RED占用！请重新设置！$RESET" && ftpnum="" && sleep 1
 			else
 				ftpnum=21
@@ -637,11 +637,11 @@ sda_install_remove(){
 			if [ -f $sdadir/qBittorrent_files/config/qBittorrent.conf ];then
 				defineport=$(cat $sdadir/qBittorrent_files/config/qBittorrent.conf | grep -F 'WebUI\Port' | sed 's/.*=//')
 				newdefineport=$defineport
-				while [ -n "$(netstat -lnWp | grep ":$newdefineport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdefineport++;sleep 1;done
+				while [ -n "$(netstat -lnWp | grep tcp | grep ":$newdefineport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdefineport++;sleep 1;done
 				sed -i "s/=$defineport$/=$newdefineport/" $sdadir/qBittorrent_files/config/qBittorrent.conf
 			else
 				newuser=1 && newdefineport=6880 && mkdir -p $sdadir/qBittorrent_files/config
-				while [ -n "$(netstat -lnWp | grep ":$newdefineport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdefineport++;sleep 1;done
+				while [ -n "$(netstat -lnWp | grep tcp | grep ":$newdefineport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdefineport++;sleep 1;done
 				echo -e "[Preferences]\nWebUI\Username=admin\nWebUI\Password_PBKDF2=\"@ByteArray(yVAdTgYH36q3jEXe7W7i/A==:8Gmdf4KqS9nZ48ySkl+eX4z9dQWZxqECKJDl8B4c3rIgzf6TcxNACvSbVohaL+ltcHgICPGbg5jUhx1eZx25Ag==)\"" >> $sdadir/qBittorrent_files/config/qBittorrent.conf
 			fi
 			$sdadir/$2 --webui-port=$newdefineport --profile=$sdadir --configuration=files -d &> /dev/null
@@ -652,7 +652,7 @@ sda_install_remove(){
 			defineport=$(cat $sdadir/data/config.json 2> /dev/null | grep http_port | grep -oE [0-9]{1,5})
 			newdefineport=$defineport
 			[ -z "$(pidof $2)" ] && {
-				while [ -n "$(netstat -lnWp | grep ":$newdefineport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdefineport++;sleep 1;done
+				while [ -n "$(netstat -lnWp | grep tcp | grep ":$newdefineport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdefineport++;sleep 1;done
 				sed -i "s/: $defineport,/: $newdefineport,/" $sdadir/data/config.json 2> /dev/null
 				rm -f $sdadir/daemon/pid $tmpdir/daemon/pid && $sdadir/$2 start --data $sdadir/data &> /dev/null
 			}
@@ -663,7 +663,7 @@ sda_install_remove(){
 				defineport=$(cat "$sdadir/AdGuardHome.yaml" | grep address | grep -oE [0-9]{1,5} | tail -1)
 				definednsport=$(cat "$sdadir/AdGuardHome.yaml" | grep port: | grep -oE [0-9]{1,5} | tail -1)
 				newdefineport=$defineport && newdnsport=$definednsport
-				while [ -n "$(netstat -lnWp | grep ":$newdefineport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdefineport++;sleep 1;done
+				while [ -n "$(netstat -lnWp | grep tcp | grep ":$newdefineport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdefineport++;sleep 1;done
 				sed -i "s/:$defineport$/:$newdefineport/" $sdadir/AdGuardHome.yaml
 				if [ "$newdnsport" = 53 ];then
 					[ ! -f /etc/config/dhcp.backup ] && cp -f /etc/config/dhcp /etc/config/dhcp.backup && log "备份/etc/config/dhcp文件并改名为dhcp.backup"
@@ -709,7 +709,7 @@ sda_install_remove(){
 					}
 				done
 				[ "$num" != 53 ] && adguardhomednsport=$num && DNSINFO="，${RED}DNS$RESET 监听端口为：$YELLOW$adguardhomednsport$RESET"
-				newdefineport=3000 && while [ -n "$(netstat -lnWp | grep ":$newdefineport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdefineport++;sleep 1;done
+				newdefineport=3000 && while [ -n "$(netstat -lnWp | grep tcp | grep ":$newdefineport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdefineport++;sleep 1;done
 				echo -e "http:\n  pprof:\n    port: 6060\n    enabled: false\n  address: 0.0.0.0:$newdefineport\n  session_ttl: 720h" > $sdadir/AdGuardHome.yaml
 				echo -e "dns:\n  port: $num\n  upstream_dns:\n    - 223.6.6.6" >> $sdadir/AdGuardHome.yaml
 			fi
@@ -812,7 +812,7 @@ sda_install_remove(){
 			newpeerport=$(uci get transmission.@transmission[0].peer_port)
 			newdefineport=$(uci get transmission.@transmission[0].rpc_port)
 			while [ -n "$(netstat -lnWp | grep ":$newpeerport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newpeerport++;sleep 1;done
-			while [ -n "$(netstat -lnWp | grep ":$newdefineport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdefineport++;sleep 1;done
+			while [ -n "$(netstat -lnWp | grep tcp | grep ":$newdefineport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdefineport++;sleep 1;done
 			uci set transmission.@transmission[0].enabled=1
 			uci set transmission.@transmission[0].config_dir=$sdadir
 			uci set transmission.@transmission[0].user=root
@@ -845,7 +845,7 @@ sda_install_remove(){
 			[ "$1" = "aria2" ] && {
 				webui="/ariang"
 				echo -e "#!/bin/sh /etc/rc.common\n\nSTART=95\n\nstart() {" > $autostartfileinit
-				newdefineport=8888 && while [ -n "$(netstat -lnWp | grep ":$newdefineport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdefineport++;sleep 1;done
+				newdefineport=8888 && while [ -n "$(netstat -lnWp | grep tcp | grep ":$newdefineport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdefineport++;sleep 1;done
 				firewalllog "add" "$1" "wan${newdefineport}rdr1" "tcp" "1" "wan" "$newdefineport" "8080"
 				firewalllog "add" "$1" "wan6800rdr1" "tcp" "1" "wan" "6800" "6800"
 				firewalllog "add" "$1" "wan6881rdr3" "tcpudp" "2" "wan" "6881-6999"
