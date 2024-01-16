@@ -1,4 +1,4 @@
-version=v1.0.5b
+version=v1.0.5c
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m'
 hardware_release=$(cat /etc/openwrt_release | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_arch=$(cat /etc/openwrt_release | grep ARCH | awk -F "'" '{print $2}')
@@ -566,7 +566,7 @@ sda_install_remove(){
 					}
 					[ "$1" = "AdGuardHome" ] && [ "$hardware_type" = "arm" ] && hardware_type=armv7
 				done
-				echo -e "\n下载 ${YELLOW}$1 $(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')$RESET ······\n" && retry_count=5 && eabi="" && softfloat="" && url=""
+				echo -e "\n下载 ${YELLOW}$1 $(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')$RESET ······" && retry_count=5 && eabi="" && softfloat="" && url=""
 				while [ ! -f /tmp/$1.tmp -a $retry_count != 0 ];do
 						[ "$hardware_type" = "arm" ] && eabi="eabi"
 						[ "${hardware_type:0:4}" = "mips" ] && softfloat="_softfloat"
@@ -574,13 +574,13 @@ sda_install_remove(){
 						[ "$1" = "Alist" ] && url="https://github.com/alist-org/alist/releases/download/$tag_name/alist-linux-musl$eabi-$hardware_type.tar.gz"
 						[ "$1" = "AdGuardHome" ] && url="https://github.com/AdguardTeam/AdGuardHome/releases/download/$tag_name/AdGuardHome_linux_$hardware_type$softfloat.tar.gz"
 						if [ "${num:0:4}" = "http" -o "${num:0:3}" = "ftp" ];then
-							url="$num" && curl --connect-timeout 3 -#Lko /tmp/$1.tmp "$url"
+							url="$num" && echo "" && curl --connect-timeout 3 -#Lko /tmp/$1.tmp "$url"
 						else
 							github_download "$1.tmp" "$url"
 						fi
 					if [ "$?" != 0 ];then
 						rm -f /tmp/$1.tmp && let retry_count--
-						[ $retry_count != 0 ] && echo -e "\n$RED下载失败！$RESET尝试重连中······（剩余重试次数：$PINK$retry_count$RESET）\n"
+						[ $retry_count != 0 ] && echo -e "\n$RED下载失败！$RESET尝试重连······（剩余重试次数：$PINK$retry_count$RESET）\c"
 					else
 						[ "$(wc -c < /tmp/$1.tmp)" = 9 ] && rm -f /tmp/$1.tmp && echo -e "\n$RED下载失败！$RESET没有找到适用于当前系统的文件包，请手动选择型号进行尝试" && main exit
 					fi
@@ -791,7 +791,7 @@ sda_install_remove(){
 			firewalllog "del" "$1" && touch $sdadir/aria2.session
 			echo -e "#!/bin/sh\necho -e \"\\\ndownload-complete \$1 \$2 \$3\"\nDir=\"$num\"\nchmod -R 777 \"\$(echo \$Dir | sed 's#[^/]\$#&/#')\$(echo \$3 | sed -e \"s#\$Dir##\" -e 's#^/##' | awk -F '/' '{print \$1}')\"" > $sdadir/on-download-complete.sh && chmod 755 $sdadir/on-download-complete.sh
 			echo -e "#!/bin/sh\necho -e \"\\\ndownload-stop \$1 \$2 \$3\"\nDir=\"$num\"\nrm -rf \"\$(echo \$Dir | sed 's#[^/]\$#&/#')\$(echo \$3 | sed -e \"s#\$Dir##\" -e 's#^/##' | awk -F '/' '{print \$1}')\"\nrm -f \"\$(echo \$Dir | sed 's#[^/]\$#&/#')\$(echo \$3 | sed -e \"s#\$Dir##\" -e 's#^/##' | awk -F '/' '{print \$1}').aria2\"" > $sdadir/on-download-stop.sh && chmod 755 $sdadir/on-download-stop.sh
-			echo -e "ConfPath=\"$sdadir/aria2.conf\"\nrm -f /tmp/tracker_all.tmp && [ \$(cat /proc/uptime | awk '{print \$1}' | sed 's/\..*//') -le 60 ] && sleep 30\necho -e \"\\\n即将尝试获取最新 \\\033[1;33mTracker\\\033[0m 服务器列表（\\\033[1;33m成功与否不影响正常启动\\\033[0m） ······ \\\c\" && sleep 2\ncurl --connect-timeout 3 -skLo /tmp/tracker_all.tmp \"https://trackerslist.com/all.txt\"\n[ \"\$?\" != 0 ] && {\n\trm -f /tmp/tracker_all.tmp\n\techo -e \"\\\033[0;31m获取失败！\\\033[0m\" && sleep 2\n}\n[ -f /tmp/tracker_all.tmp ] && {\n\techo -e \"\\\033[1;32m获取成功！\\\033[0m\"\n\t#过滤IPv6的Tracker服务器地址：\n\tsed -i '/\/\/\[/d' /tmp/tracker_all.tmp\n\tsed -i \"/^$/d\" /tmp/tracker_all.tmp\n\tTrackers=\$(sed \":i;N;s|\\\n|,|;ti\" /tmp/tracker_all.tmp)\n\tsed -i \"s|bt-tracker=.*|bt-tracker=\$Trackers|\" \$ConfPath\n}\naria2c --conf-path=\$ConfPath -D &> /dev/null" > $sdadir/tracker_update.sh && chmod 755 $sdadir/tracker_update.sh
+			echo -e "ConfPath=\"$sdadir/aria2.conf\"\nrm -f /tmp/tracker_all.tmp && [ \$(cat /proc/uptime | awk '{print \$1}' | sed 's/\..*//') -le 60 ] && sleep 30\necho -e \"\\\n即将尝试获取最新 \\\033[1;33mTracker\\\033[0m 服务器列表（\\\033[1;33m成功与否不影响正常启动\\\033[0m） ······ \\\c\" && sleep 2\ncurl --connect-timeout 3 -skLo /tmp/tracker_all.tmp \"https://trackerslist.com/all.txt\"\n[ \"\$?\" != 0 ] && {\n\trm -f /tmp/tracker_all.tmp\n\techo -e \"\\\033[0;31m获取失败！\\\033[0m\" && sleep 2\n}\n[ -f /tmp/tracker_all.tmp ] && {\n\techo -e \"\\\033[1;32m获取成功！\\\033[0m\"\n\t#过滤IPv6的Tracker服务器地址：\n\t#sed -i '/\/\/\[/d' /tmp/tracker_all.tmp\n\tsed -i \"/^$/d\" /tmp/tracker_all.tmp\n\tTrackers=\$(sed \":i;N;s|\\\n|,|;ti\" /tmp/tracker_all.tmp)\n\tsed -i \"s|bt-tracker=.*|bt-tracker=\$Trackers|\" \$ConfPath\n}\naria2c --conf-path=\$ConfPath -D &> /dev/null" > $sdadir/tracker_update.sh && chmod 755 $sdadir/tracker_update.sh
 			echo -e "enable-rpc=true\nrpc-allow-origin-all=true\nrpc-listen-all=true\npeer-id-prefix=BC1980-\npeer-agent=BitComet 1.98\nuser-agent=BitComet/1.98\ninput-file=$sdadir/aria2.session\non-download-complete=$sdadir/on-download-complete.sh\non-download-stop=$sdadir/on-download-stop.sh\ndir=$num\nmax-concurrent-downloads=2\ncontinue=true\nmax-connection-per-server=16\nmin-split-size=20M\nremote-time=true\nsplit=16\nbt-remove-unselected-file=true\nbt-detach-seed-only=true\nbt-enable-lpd=true\nbt-max-peers=0\nbt-tracker=\ndht-file-path=$sdadir/dht.dat\ndht-file-path6=$sdadir/dht6.dat\ndht-listen-port=6881-6999\nlisten-port=6881-6999\nmax-overall-upload-limit=3M\nmax-upload-limit=0\nseed-ratio=3\nseed-time=2880\npause-metadata=false\nalways-resume=false\nauto-save-interval=1\nfile-allocation=none\nforce-save=false\nmax-overall-download-limit=0\nmax-download-limit=0\nsave-session=$sdadir/aria2.session\nsave-session-interval=1" > $sdadir/aria2.conf && $sdadir/tracker_update.sh
 		}
 		[ "$1" = "transmission" ] && {
@@ -883,7 +883,7 @@ domainblacklist_update(){
 	return 0
 }
 main(){
-	[ "$1" = "exit" ] && echo -e "\n\n$PINK\t\t [[  即将返回主页面  ]]$RESET" && sleep 2
+	#[ "$1" = "exit" ] && echo -e "\n\n$PINK\t\t [[  即将返回主页面  ]]$RESET" && sleep 2
 	echo -e "\n$YELLOW=========================================================$RESET" && num=""
 	echo -e "\n$PINK\t\t[[  这里以下是主页面  ]]$RESET"
 	echo -e "\n$GREEN=========================================================$RESET"
