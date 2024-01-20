@@ -916,7 +916,7 @@ main(){
 		echo -e "del+ID. 一键删除对应选项插件 如：${YELLOW}del1$RESET"
 		echo -e "0. 退出$YELLOW小米路由器$GREEN简易安装插件脚本$RESET"
 		[ "$changlogshowed" != "true" -a -f ${0%/*}/XiaomiSimpleInstallBox-change.log ] && {
-			changlogshowed=true && sed -i '2s/changlogshowed=.*/changlogshowed=true/' $0
+			sed -i '2s/changlogshowed=.*/changlogshowed=true/' $0
 			echo -e "\n$PINK=========================================================$RESET"
 			echo -e "\n$YELLOW\t小米路由器$GREEN简易安装插件脚本$YELLOW更新日志$RESET"
 			cat ${0%/*}/XiaomiSimpleInstallBox-change.log
