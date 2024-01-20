@@ -1,5 +1,5 @@
-version=v1.0.5e
-RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m'
+version=v1.0.5f
+RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=true
 hardware_release=$(cat /etc/openwrt_release | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_arch=$(cat /etc/openwrt_release | grep ARCH | awk -F "'" '{print $2}')
 sdalist=$(df | sed -n '1!p' | grep -vE "rom|tmp|ini|overlay" | awk '{print $6}')
@@ -16,6 +16,7 @@ log(){
 }
 opkg_test_install(){
 	[ -z "$(opkg list-installed | grep $1 2> /dev/null)" ] && {
+		[ -z "$(grep opkg_update /etc/profile 2> /dev/null)" ] && echo -e "\n#小米简易安装插件脚本避免重复运行opkg update命令\nrm -f /tmp/opkg_updated" >> /etc/profile
 		echo -e "\n本次操作需要使用到 $YELLOW$1$RESET" && sleep 1
 		echo -e "\n本机还$RED没有安装 $YELLOW$1$RESET ！即将通过 opkg 下载安装\n" && sleep 1
 		[ "$1" = "aria2" ] && rm -rf /www/ariang && opkg remove ariang aria2 &> /dev/null
@@ -482,7 +483,7 @@ sda_install_remove(){
 			iptables -F DOMAIN_REJECT_RULE &> /dev/null
 			iptables -X DOMAIN_REJECT_RULE &> /dev/null
 			[ -f /etc/domainblacklist ] && rm -f /etc/domainblacklist && log "删除文件/etc/domainblacklist"
-			sed -i '/domainblacklist/d' /etc/crontabs/root && /etc/init.d/cron restart &> /dev/null
+			[ -n "$(grep domainblacklist /etc/crontabs/root 2> /dev/null)" ] && sed -i '/domainblacklist/d' /etc/crontabs/root && /etc/init.d/cron restart &> /dev/null && log "删除/etc/crontabs/root文件中的定时任务domainblacklist"
 		}
 		[ "$1" = "wakeonlan" ] && rm -rf /usr/share/perl /usr/lib/perl5/ && opkg remove wakeonlan perlbase-net perlbase-time perlbase-dynaloader perlbase-filehandle perlbase-class perlbase-getopt perlbase-io perlbase-socket perlbase-selectsaver perlbase-symbol perlbase-scalar perlbase-posix perlbase-tie perlbase-list perlbase-fcntl perlbase-xsloader perlbase-errno perlbase-bytes perlbase-base perlbase-essential perlbase-config perl &> /dev/null && sed -i '/网络唤醒/d' /etc/crontabs/root && /etc/init.d/cron restart &> /dev/null
 		[ -f "$autostartfileinit" ] && rm -f $autostartfileinit && log "删除自启动文件$autostartfileinit"
@@ -914,12 +915,19 @@ main(){
 		echo "---------------------------------------------------------"
 		echo -e "del+ID. 一键删除对应选项插件 如：${YELLOW}del1$RESET"
 		echo -e "0. 退出$YELLOW小米路由器$GREEN简易安装插件脚本$RESET"
+		[ "$changlogshowed" != "true" -a -f ${0%/*}/XiaomiSimpleInstallBox-change.log ] && {
+			changlogshowed=true && sed -i '2s/changlogshowed=.*/changlogshowed=true/' $0
+			echo -e "\n$PINK=========================================================$RESET"
+			echo -e "\n$YELLOW\t小米路由器$GREEN简易安装插件脚本$YELLOW更新日志$RESET"
+			cat ${0%/*}/XiaomiSimpleInstallBox-change.log
+			echo -e "\n$PINK=========================================================$RESET"
+		}
 	}
 	while [ -z "$num" ];do
 		echo -ne "\n"
 		read -p "请输入对应选项的数字 > " num
 		[ "$num" = 99 ] && break
-		[ "${num:0:3}" = "del" ] && [ -n "${num:3:1}" ] && [ -z "$(echo ${num:3:1} | sed 's/[0-9]//g')" ] && [ "${num:3:1}" -ge 1 -a "${num:3:1}" -le 8 ] && break
+		[ "${num:0:3}" = "del" ] && [ -n "${num:3}" ] && [ -z "$(echo ${num:3} | sed 's/[0-9]//g')" ] && [ "${num:3}" -ge 1 -a "${num:3}" -le 8 ] && break
 		[ -n "$(echo $num | sed 's/[0-9]//g')" -o -z "$num" ] && num="" && continue
 		[ "$num" -lt 0 -o "$num" -gt 8 ] && num="" && continue
 		[ "$num" -eq 0 ] && {
@@ -933,6 +941,31 @@ main(){
 			echo -e "\n$RED=========================================================$RESET" && exit
 		}
 	done
+	[ "${num:0:3}" = "del" ] && {
+		case "${num:3}" in
+			1)	plugin="qBittorrent";pluginfile="qbittorrent-nox";;
+			2)	plugin="Alist";pluginfile="alist";;
+			3)	plugin="AdGuardHome";pluginfile="AdGuardHome";;
+			4)	plugin="aria2";pluginfile="aria2.conf";;
+			5)	plugin="vsftpd";pluginfile=".notexist";;
+			6)	plugin="transmission";pluginfile="settings.json";;
+			7)	plugin="设备禁止访问网页黑名单";pluginfile=".notexist";;
+			8)	plugin="wakeonlan";pluginfile=".notexist"
+		esac
+		echo -e "\n$PINK确认一键卸载 $plugin 吗？（若确认所有配置文件将会全部删除）$RESET" && num=""
+		echo "---------------------------------------------------------"
+		echo "1. 确认卸载"
+		echo "---------------------------------------------------------"
+		echo "0. 返回主页面"
+		while [ -z "$num" ];do
+			echo -ne "\n"
+			read -p "请输入对应选项的数字 > " num
+			[ -n "$(echo $num | sed 's/[0-9]//g')" -o -z "$num" ] && num="" && continue
+			[ "$num" -gt 1 ] && num="" && continue
+			[ "$num" -eq 0 ] && main
+			sda_install_remove "$plugin" "$pluginfile" "del"
+		done
+	}
 	case "$num" in
 		1)	sda_install_remove "qBittorrent" "qbittorrent-nox" "-v" "30MB" "c0re100" "qBittorrent-Enhanced-Edition" "rm -rf /.cache /.config /.local";;
 		2)	sda_install_remove "Alist" "alist" "version | grep v" "64MB" "alist-org" "alist";;
@@ -1011,39 +1044,15 @@ main(){
 			echo -e "\n$RED$BLINK十分感谢您的支持！！！！！！！！$RESET\n\n$YELLOW微信扫码：$RESET\n"
 			echo H4sIAAAAAAAAA71UwQ3DMAj8d4oblQcPJuiAmaRSHMMZYzcvS6hyXAPHcXB97Tpon5PJcj5cX2XDfS3wL2mW3i38FhkMwHNqoaSb9YP291p7rSInTCneDRugbLr0q7uhlbX7lkUwxxVsfctaMMW/2a87YPD01e+yGiF6onHq/MAvlFwGUO2AMW7VFwODFGolOMBToaU6d1UEAYwp+jtCN9dxdsppCr4Q4N0F5EbiEiKS/P5MRupGKMGIFp4Jv8jv1lzNyiLMg3QcEc03CMI6U70PImYSU9d2nhxLttkkYKF01fZ/Q9n6Cvu0D1i7gd1rYQZjG2ynYrtL5md8r5P7C7YO2PF8PwRFQamaBwAA | base64 -d | gzip -d
 			echo -e "\n$YELLOW支付宝扫码：$RESET\n"
-			echo H4sIAAAAAAAAA71USQ7EMAi7zyv8VA4c8oI+sC8ZqQ3gLNC5TCVUKSlgsAnn0c4X7fMm2IyH81A2XNf3wb0Et2d4J3EJQgMog/Rw0Pn66uKdZyRsO3tJYp5qaEij9hrozpolV662nz17EV1igVgQUBPEDQy7Owh+6sYLE+4DlF24I2VYLJVKgRQRzpG1EyJdhYPhB7Wq/K2zINwLaM44w9wKT0mlhmSMjeKLN+Uj5koGuSlKIyBnKtA34yBLaJthCu1nFVkmUy6YtKEEHjRJ94D6NIxyBFFtXABJ9mEbCFV8/xD/qKPV72G3B+Ak82PtzCB21jQCT296tz/WFcESrZeTQ/4u/mqv430B27+RdoQHAAA= | base64 -d | gzip -d && exit;;
-		del[1-8])
-			case "${num:3:1}" in
-				1)	plugin="qBittorrent";pluginfile="qbittorrent-nox";;
-				2)	plugin="Alist";pluginfile="alist";;
-				3)	plugin="AdGuardHome";pluginfile="AdGuardHome";;
-				4)	plugin="aria2";pluginfile="aria2.conf";;
-				5)	plugin="vsftpd";pluginfile=".notexist";;
-				6)	plugin="transmission";pluginfile="settings.json";;
-				7)	plugin="设备禁止访问网页黑名单";pluginfile=".notexist";;
-				8)	plugin="wakeonlan";pluginfile=".notexist"
-			esac
-			echo -e "\n$PINK确认一键卸载 $plugin 吗？（若确认所有配置文件将会全部删除）$RESET" && num=""
-			echo "---------------------------------------------------------"
-			echo "1. 确认卸载"
-			echo "---------------------------------------------------------"
-			echo "0. 返回主页面"
-			while [ -z "$num" ];do
-				echo -ne "\n"
-				read -p "请输入对应选项的数字 > " num
-				[ -n "$(echo $num | sed 's/[0-9]//g')" -o -z "$num" ] && num="" && continue
-				[ "$num" -gt 1 ] && num="" && continue
-				[ "$num" -eq 0 ] && main
-				sda_install_remove "$plugin" "$pluginfile" "del"
-			done
+			echo H4sIAAAAAAAAA71USQ7EMAi7zyv8VA4c8oI+sC8ZqQ3gLNC5TCVUKSlgsAnn0c4X7fMm2IyH81A2XNf3wb0Et2d4J3EJQgMog/Rw0Pn66uKdZyRsO3tJYp5qaEij9hrozpolV662nz17EV1igVgQUBPEDQy7Owh+6sYLE+4DlF24I2VYLJVKgRQRzpG1EyJdhYPhB7Wq/K2zINwLaM44w9wKT0mlhmSMjeKLN+Uj5koGuSlKIyBnKtA34yBLaJthCu1nFVkmUy6YtKEEHjRJ94D6NIxyBFFtXABJ9mEbCFV8/xD/qKPV72G3B+Ak82PtzCB21jQCT296tz/WFcESrZeTQ/4u/mqv430B27+RdoQHAAA= | base64 -d | gzip -d && exit
 	esac
 }
-echo -e "MIRRORS=\"$MIRRORS\"\ngithub_download(){\n\tfor MIRROR in \$MIRRORS;do\n\t\tcurl --connect-timeout 3 -sLko /tmp/\$1 \"\$MIRROR\$2\"\n\t\tif [ \"\$?\" = 0 ];then\n\t\t\t[ \$(wc -c < /tmp/\$1) -lt 1024 ] && rm -f /tmp/\$1 || break\n\t\telse\n\t\t\trm -f /tmp/\$1\n\t\tfi\n\tdone\n\t[ -f /tmp/\$1 ] && return 0 || return 1\n}\nrm -f /tmp/XiaomiSimpleInstallBox.sh.tmp && for tmp in \$(ps | grep _update_check | awk '{print \$1}');do [ \"\$tmp\" != \"\$\$\" ] && killpid \$tmp;done\nwhile [ ! -f /tmp/XiaomiSimpleInstallBox.sh.tmp ];do\n\tgithub_download \"XiaomiSimpleInstallBox.sh.tmp\" \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox.sh\"\n\t[ \"\$?\" != 0 ] && {\n\t\tcurl --connect-timeout 3 -sLko /tmp/XiaomiSimpleInstallBox.sh.tmp \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox.sh\"\n\t\t[ \"\$?\" != 0 ] && rm -f /tmp/XiaomiSimpleInstallBox.sh.tmp\n\t}\ndone\nif [ \"$version\" != \"\$(sed -n '1p' /tmp/XiaomiSimpleInstallBox.sh.tmp | sed 's/version=//')\" ];then\n\trm -f /tmp/XiaomiSimpleInstallBox-change.log\n\twhile [ ! -f /tmp/XiaomiSimpleInstallBox-change.log ];do\n\t\tgithub_download \"XiaomiSimpleInstallBox-change.log\" \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox-change.log\"\n\t\t[ \"\$?\" != 0 ] && {\n\t\t\tcurl --connect-timeout 3 -sLko /tmp/XiaomiSimpleInstallBox-change.log \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox-change.log\"\n\t\t\t[ \"\$?\" != 0 ] && rm -f /tmp/XiaomiSimpleInstallBox-change.log\n\t\t}\n\tdone\n\techo -e \"\\\n$PINK=========================================================$RESET\"\n\techo -e \"\\\n$YELLOW小米路由器$GREEN简易安装插件脚本 $PINK$version $BLUE已自动更新到最新版：$PINK\$(sed -n '1p' /tmp/XiaomiSimpleInstallBox.sh.tmp | sed 's/version=//') $BLUE，请重新运行脚本$RESET\"\n\techo -e \"\\\n$PINK=========================================================$RESET\"\n\tmv -f /tmp/XiaomiSimpleInstallBox-change.log ${0%/*}/XiaomiSimpleInstallBox-change.log\n\tmv -f $0 ${0%/*}/XiaomiSimpleInstallBox.sh.$version.backup\n\tmv -f /tmp/XiaomiSimpleInstallBox.sh.tmp ${0%/*}/XiaomiSimpleInstallBox.sh\n\tchmod 755 ${0%/*}/XiaomiSimpleInstallBox.sh\nelse\n\trm -f /tmp/XiaomiSimpleInstallBox.sh.tmp\nfi\nrm -f /tmp/XiaomiSimpleInstallBox_update_check" > /tmp/XiaomiSimpleInstallBox_update_check && chmod 755 /tmp/XiaomiSimpleInstallBox_update_check && /tmp/XiaomiSimpleInstallBox_update_check &
+echo -e "MIRRORS=\"$MIRRORS\"\ngithub_download(){\n\tfor MIRROR in \$MIRRORS;do\n\t\tcurl --connect-timeout 3 -sLko /tmp/\$1 \"\$MIRROR\$2\"\n\t\tif [ \"\$?\" = 0 ];then\n\t\t\t[ \$(wc -c < /tmp/\$1) -lt 1024 ] && rm -f /tmp/\$1 || break\n\t\telse\n\t\t\trm -f /tmp/\$1\n\t\tfi\n\tdone\n\t[ -f /tmp/\$1 ] && return 0 || return 1\n}\nrm -f /tmp/XiaomiSimpleInstallBox.sh.tmp && for tmp in \$(ps | grep _update_check | awk '{print \$1}');do [ \"\$tmp\" != \"\$\$\" ] && killpid \$tmp;done\nwhile [ ! -f /tmp/XiaomiSimpleInstallBox.sh.tmp ];do\n\tgithub_download \"XiaomiSimpleInstallBox.sh.tmp\" \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox.sh\"\n\t[ \"\$?\" != 0 ] && {\n\t\tcurl --connect-timeout 3 -sLko /tmp/XiaomiSimpleInstallBox.sh.tmp \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox.sh\"\n\t\t[ \"\$?\" != 0 ] && rm -f /tmp/XiaomiSimpleInstallBox.sh.tmp\n\t}\ndone\nif [ \"$version\" != \"\$(sed -n '1p' /tmp/XiaomiSimpleInstallBox.sh.tmp | sed 's/version=//')\" ];then\n\trm -f /tmp/XiaomiSimpleInstallBox-change.log\n\twhile [ ! -f /tmp/XiaomiSimpleInstallBox-change.log ];do\n\t\tgithub_download \"XiaomiSimpleInstallBox-change.log\" \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox-change.log\"\n\t\t[ \"\$?\" != 0 ] && {\n\t\t\tcurl --connect-timeout 3 -sLko /tmp/XiaomiSimpleInstallBox-change.log \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox-change.log\"\n\t\t\t[ \"\$?\" != 0 ] && rm -f /tmp/XiaomiSimpleInstallBox-change.log\n\t\t}\n\tdone\n\techo -e \"\\\n$PINK=========================================================$RESET\"\n\techo -e \"\\\n$YELLOW小米路由器$GREEN简易安装插件脚本 $PINK$version $BLUE已自动更新到最新版：$PINK\$(sed -n '1p' /tmp/XiaomiSimpleInstallBox.sh.tmp | sed 's/version=//') $BLUE，请重新运行脚本$RESET\"\n\techo -e \"\\\n$PINK=========================================================$RESET\"\n\tmv -f /tmp/XiaomiSimpleInstallBox-change.log ${0%/*}/XiaomiSimpleInstallBox-change.log\n\tmv -f $0 $0.$version.backup\n\tmv -f /tmp/XiaomiSimpleInstallBox.sh.tmp $0\n\tsed -i '2s/changlogshowed=.*/changlogshowed=false/' $0\n\tchmod 755 $0\nelse\n\trm -f /tmp/XiaomiSimpleInstallBox.sh.tmp\nfi\nrm -f /tmp/XiaomiSimpleInstallBox_update_check" > /tmp/XiaomiSimpleInstallBox_update_check && chmod 755 /tmp/XiaomiSimpleInstallBox_update_check && /tmp/XiaomiSimpleInstallBox_update_check &
 
 #修复设备网页黑名单重启后不会生效问题
 [ -f /etc/domainblacklist ] && [ -z "$(sed -n 12p /etc/domainblacklist 2> /dev/null | grep '(')" ] && sed -i "12c\\\t[ -z \"\$(iptables -S FORWARD | grep -e -i | head -1 | grep DOMAIN)\" ] && reload" /etc/domainblacklist && /etc/domainblacklist
 
-echo -e "\n$YELLOW=========================================================$RESET" && rm -f /tmp/opkg_updated
+echo -e "\n$YELLOW=========================================================$RESET"
 echo -e "\n欢迎使用$YELLOW小米路由器$GREEN简易安装插件脚本 $PINK$version$RESET ，觉得好用希望能够$RED$BLINK打赏支持~！$RESET"
 echo -e "\n您的小小支持是我持续更新的动力~~~$RED$BLINK十分感谢~ ~ ~ ! ! !$RESET"
 echo -e "\n$YELLOW打赏地址：${SKYBLUE}https://github.com/xilaochengv/BuildKernelSU$RESET 或$RED$BLINK主页面输入：99$RESET"
