@@ -1,4 +1,4 @@
-version=v1.0.5g
+version=v1.0.5h
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=true
 hardware_release=$(cat /etc/openwrt_release | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_arch=$(cat /etc/openwrt_release | grep ARCH | awk -F "'" '{print $2}')
@@ -562,9 +562,9 @@ sda_install_remove(){
 							2)	hardware_type=arm64;;
 							3)	hardware_type=arm;;
 							4)	hardware_type=mips;;
-							5)	hardware_type=mips64;;
-							6)	hardware_type=mips64le;;
-							7)	hardware_type=mipsle;;
+							5)	hardware_type=mipsle;;
+							6)	hardware_type=mips64;;
+							7)	hardware_type=mips64le;;
 							8)	hardware_type=amd64;;
 							0)	sda_install_remove "$1" "$2" "$3" "$4" "$5" "$6" "$7" "return"
 						esac
@@ -572,8 +572,8 @@ sda_install_remove(){
 					[ "${num:0:4}" != "http" -a "${num:0:3}" != "ftp" ] && [ "$num" -lt 1 -o "$num" -gt 8 ] && num="" && continue
 					[ "$1" = "qBittorrent" ] && {
 						[ "$hardware_type" = "arm64" ] && hardware_type=aarch64
-						[ "$hardware_type" = "mips64le" ] && hardware_type=mips64el
 						[ "$hardware_type" = "mipsle" ] && hardware_type=mipsel
+						[ "$hardware_type" = "mips64le" ] && hardware_type=mips64el
 						[ "$hardware_type" = "amd64" ] && hardware_type=x86_64
 					}
 					[ "$1" = "AdGuardHome" ] && [ "$hardware_type" = "arm" ] && hardware_type=armv7
@@ -774,7 +774,8 @@ sda_install_remove(){
 			echo -e "\n$YELLOW$1$RESET 端口转发规则 $GREEN已全部更新$RESET，即将重启防火墙 ······" && sleep 2 && /etc/init.d/firewall restart &> /dev/null
 			echo -e "\n${YELLOW}$1 $PINK$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/') $GREEN已运行$RESET并设置为$YELLOW开机自启动！$RESET"
 			echo -e "\n管理页面地址：$SKYBLUE$hostip:$newdefineport$RESET$DNSINFO"
-			echo -e "\n外网管理页面地址：$SKYBLUE$(curl -sLk v4.ident.me):$newdefineport$RESET"
+			ipv4=$(curl --connect-timeout 3 -sLk v4.ident.me)
+			[ -n "$ipv4" ] && echo -e "\n外网管理页面地址：$SKYBLUE$ipv4:$newdefineport$RESET"
 			[ -n "$newuser" ] && echo -e "\n初始账号：${PINK}admin$RESET 初始密码：${PINK}12345678$RESET"
 			[ "$1" = "Alist" ] && echo -e "\n官方使用指南：${SKYBLUE}https://alist.nn.ci/zh/$RESET"
 		else
@@ -874,7 +875,8 @@ sda_install_remove(){
 			echo -e "\n${YELLOW}$1 $GREEN已运行$RESET并设置为$YELLOW开机自启动！$RESET"
 			[ "$1" = "aria2" ] && echo -e "\n管理页面地址：$SKYBLUE$hostip/$webui$RESET"
 			[ "$1" = "transmission" ] && echo -e "\n管理页面地址：$SKYBLUE$hostip:$newdefineport$RESET"
-			echo -e "\n外网管理页面地址：$SKYBLUE$(curl -sLk v4.ident.me):$newdefineport$webui$RESET"
+			ipv4=$(curl --connect-timeout 3 -sLk v4.ident.me)
+			[ -n "$ipv4" ] && echo -e "\n外网管理页面地址：$SKYBLUE$ipv4:$newdefineport$webui$RESET"
 			[ "$1" = "transmission" ] && echo -e "\n初始账号：${PINK}admin$RESET 初始密码：${PINK}12345678$RESET"
 		else
 			echo -e "\n$RED启动失败！$RESET请尝试修改 $BLUE/etc/opkg/distfeeds.conf$RESET 中的地址后重试安装！"
