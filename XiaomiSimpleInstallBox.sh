@@ -1,5 +1,5 @@
-version=v1.0.5h
-RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=true
+version=v1.0.6
+RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=false
 hardware_release=$(cat /etc/openwrt_release | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_arch=$(cat /etc/openwrt_release | grep ARCH | awk -F "'" '{print $2}')
 sdalist=$(df | sed -n '1!p' | grep -vE "rom|tmp|ini|overlay" | awk '{print $6}')
@@ -23,6 +23,7 @@ opkg_test_install(){
 		[ "$1" = "vsftpd" ] && rm -f /etc/vsftpd.conf && opkg remove vsftpd &> /dev/null
 		[ "$1" = "transmission" ] && rm -rf /etc/config/transmission /usr/share/transmission/ && opkg remove transmission-web transmission-daemon-openssl transmission-daemon-mbedtls libnatpmp libminiupnpc &> /dev/null
 		[ "$1" = "wakeonlan" ] && rm -rf /usr/share/perl /usr/lib/perl5/ && opkg remove wakeonlan perlbase-net perlbase-time perlbase-dynaloader perlbase-filehandle perlbase-class perlbase-getopt perlbase-io perlbase-socket perlbase-selectsaver perlbase-symbol perlbase-scalar perlbase-posix perlbase-tie perlbase-list perlbase-fcntl perlbase-xsloader perlbase-errno perlbase-bytes perlbase-base perlbase-essential perlbase-config perl &> /dev/null
+		[ "$1" = "zerotier" ] && rm -f /etc/config/zerotier && opkg remove zerotier &> /dev/null
 		[ ! -f /tmp/opkg_updated ] && {
 			opkg update
 			if [ "$?" != 0 ];then
@@ -33,14 +34,18 @@ opkg_test_install(){
 				echo "src/gz openwrt_routing http://downloads.openwrt.org/releases/packages-$hardware_release/$hardware_arch/routing" >> /etc/opkg/distfeeds.conf && log "新建文件/etc/opkg/distfeeds.conf"
 				opkg update
 				[ "$?" = 0 ] && touch /tmp/opkg_updated || {
-					echo -e "\n更新源$RED连接失败$RESET！请检查 $BLUE/etc/opkg/distfeeds.conf$RESET 中的地址是否正确或 ${SKYBLUE}/overlay$RESET 空间是否足够后重试！" && main
+					echo -e "\n更新源$RED连接失败$RESET！请检查 $BLUE/etc/opkg/distfeeds.conf$RESET 中的地址是否正确或 ${SKYBLUE}/overlay$RESET 空间是否足够后重试！"
+					[ "$1" = "zerotier" ] && return 1 || main
 				}
 			else
 				touch /tmp/opkg_updated
 			fi
 		}
 		opkg install $1
-		[ "$?" != 0 ] && echo -e "\n安装 ${YELLOW}$1$RED 失败！$RESET请检查 $BLUE/etc/opkg/distfeeds.conf$RESET 中的地址是否正确并有效！" && main
+		[ "$?" != 0 ] && {
+			echo -e "\n安装 ${YELLOW}$1$RED 失败！$RESET请检查 $BLUE/etc/opkg/distfeeds.conf$RESET 中的地址是否正确并有效！"
+			[ "$1" = "zerotier" ] && return 1 || main
+		}
 		echo -e "\n$GREEN安装 $YELLOW$1 $GREEN成功$RESET" && sleep 2 && [ "$1" = "vsftpd" ] && newuser=1
 	}
 	[ "$1" = "vsftpd" ] && {
@@ -303,6 +308,11 @@ opkg_test_install(){
 		fi
 		opkg_test_install "wakeonlan"
 	}
+	[ "$1" = "zerotier" ] && {
+		echo -e "\n即将检测$YELLOW $1$RESET 是否能够直接运行······" && sleep 2
+		[ -z "$(zerotier-one -v 2> /dev/null)" ] && rm -f /etc/config/zerotier && opkg remove zerotier &> /dev/null && return 1
+		skipdownload=1
+	}
 	return 0
 }
 sdadir_available_check(){
@@ -314,17 +324,19 @@ sdadir_available_check(){
 		[ "$sdadiravailable" -lt $sizeneeded ] && {
 			echo -e "\n所选目录 $BLUE${sdadir%/*} $RED空间不足 $(($sizeneeded/1024)) MB$RESET！无法直接下载使用！不过可以尝试使用 ${YELLOW}upx$RESET 压缩后使用" && sleep 2
 			tmpdiravailable=$(df | grep " /tmp$" | awk '{print $4}')
-			[ "$tmpdiravailable" -ge 102400 ] && {
-				echo -e "\n检测到临时目录 $BLUE/tmp$RESET 可用空间为 $RED$(awk BEGIN'{printf "%0.3f MB",'$tmpdiravailable'/1024}')$RESET" && tmpnum=""
-				echo -e "\n$RED临时目录内的文件会在路由器重启后丢失$RESET，使用的话，每次开机后将会自动重新下载主程序文件，是否使用临时目录？" && sleep 1
-				while [ -z "$tmpnum" ];do
-					echo -ne "\n"
-					read -p "确认使用请输入 y ，尝试压缩后使用请输入 1 ，返回上一页请输入 0 > " tmpnum
-					[ "$tmpnum" = y ] && tmpdir="/tmp/XiaomiSimpleInstallBox" && echo -e "\n若使用临时目录一段时间后，重启路由器$YELLOW自动下载失败$RESET则可能是 ${YELLOW}github加速镜像 $RED已失效$RESET，届时可以运行本脚本重新下载以$GREEN更新开机时的下载地址$RESET" && sleep 3 && break
-					[ -n "$(echo $tmpnum | sed 's/[0-9]//g')" -o -z "$tmpnum" ] && tmpnum="" && continue
-					[ "$tmpnum" -gt 1 ] && tmpnum="" && continue
-					[ "$tmpnum" -eq 0 ] && sda_install_remove "$1" "$2" "$3" "$4" "$5" "$6" "$7" "return"
-				done
+			[ "$1" != "zerotier" -o "$1" = "zerotier" -a ! -f /tmp/zerotier-one ] && {
+				[ "$tmpdiravailable" -ge 102400 ] && {
+					echo -e "\n检测到临时目录 $BLUE/tmp$RESET 可用空间为 $RED$(awk BEGIN'{printf "%0.3f MB",'$tmpdiravailable'/1024}')$RESET" && tmpnum=""
+					echo -e "\n$RED临时目录内的文件会在路由器重启后丢失$RESET，使用的话，每次开机后将会自动重新下载主程序文件，是否使用临时目录？" && sleep 1
+					while [ -z "$tmpnum" ];do
+						echo -ne "\n"
+						read -p "确认使用请输入 y ，尝试压缩后使用请输入 1 ，返回上一页请输入 0 > " tmpnum
+						[ "$tmpnum" = y ] && tmpdir="/tmp/XiaomiSimpleInstallBox" && echo -e "\n若使用临时目录一段时间后，重启路由器$YELLOW自动下载失败$RESET则可能是 ${YELLOW}github加速镜像 $RED已失效$RESET，届时可以运行本脚本重新下载以$GREEN更新开机时的下载地址$RESET" && sleep 3 && break
+						[ -n "$(echo $tmpnum | sed 's/[0-9]//g')" -o -z "$tmpnum" ] && tmpnum="" && continue
+						[ "$tmpnum" -gt 1 ] && tmpnum="" && continue
+						[ "$tmpnum" -eq 0 ] && sda_install_remove "$1" "$2" "$3" "$4" "$5" "$6" "$7" "return"
+					done
+				}
 			}
 			[ -z "$tmpdir" ] && {
 				echo -e "\n下载完成后请使用电脑利用 ${YELLOW}upx$RESET 压缩器对其进行压缩"
@@ -415,12 +427,12 @@ sda_install_remove(){
 			echo -e "\n$PINK\t[[  这里以下是 ${YELLOW}$1 $PINK的安装过程  ]]$RESET"
 			echo -e "\n$YELLOW=========================================================$RESET"
 		}
-		[ "$1" = "qBittorrent" ] && opkg_test_install unzip
-		[ "$1" = "aria2" ] && opkg_test_install ariang && opkg_test_install aria2
-		[ "$1" = "vsftpd" ] && opkg_test_install vsftpd
+		[ "$1" = "qBittorrent" ] && opkg_test_install "unzip"
+		[ "$1" = "aria2" ] && opkg_test_install "ariang" && opkg_test_install "aria2"
+		[ "$1" = "vsftpd" ] && opkg_test_install "vsftpd"
 		[ "$1" = "transmission" ] && {
-			opkg_test_install transmission-web
-			[ -n "$(find /usr -name openssl)" ] && opkg_test_install transmission-daemon-openssl || opkg_test_install transmission-daemon-mbedtls
+			opkg_test_install "transmission-web"
+			[ -n "$(find /usr -name openssl)" ] && opkg_test_install "transmission-daemon-openssl" || opkg_test_install "transmission-daemon-mbedtls"
 		}
 	}
 	for tmplist in $sdalist;do
@@ -428,7 +440,10 @@ sda_install_remove(){
 		for name in $sdadir;do
 			[ -f "$name" -a -n "$(echo $name | grep -v '\.d')" -o -L "$name" -a -n "$(echo $name | grep -v '\.d')" ] && {
 				sdadir=$name
-				[ -L "$sdadir" -a -n "$(echo $name | grep -v '\.d')" ] && tmpdir="/tmp/XiaomiSimpleInstallBox"
+				[ -L "$sdadir" -a -n "$(echo $name | grep -v '\.d')" ] && {
+					tmpdir="/tmp/XiaomiSimpleInstallBox"
+					[ "$1" = "zerotier" ] && skipdownload=1
+				}
 				break
 			}
 		done
@@ -436,6 +451,10 @@ sda_install_remove(){
 	done
 	if [ -z "$sdadir" ];then
 		if [ -z "$del" ];then
+			[ "$1" = "zerotier" -a -z "$8" ] && {
+				opkg_test_install "zerotier"
+				[ "$?" != 0 ] && echo -e "\n${RED}opkg 下载失败或本机无法直接运行 $YELLOW$1$RESET ！需要下载静态二进制文件" && sleep 2
+			}
 			echo -e "\n$PINK请选择下载保存路径：$RESET" && listcount="" && num=""
 			echo "---------------------------------------------------------"
 			echo -e "${GREEN}ID\t$SKYBLUE剩余可用空间\t\t$BLUE可选路径$RESET"
@@ -459,14 +478,15 @@ sda_install_remove(){
 				[ -n "$(echo $num | sed 's/[0-9]//g')" -o -z "$num" ] && num="" && continue
 				[ "$num" -gt $listcount ] && num="" && continue
 				[ "$num" -eq 0 ] && main
-				sdadir=$(echo $sdalist | awk '{print $'$num'}')/$1 && sdadir_available_check "$1" "$2" "$3" "$4" "$5" "$6" "$7"
+				sdadir=$(echo $sdalist | awk '{print $'$num'}')/$1 && [ -z "$skipdownload" ] && sdadir_available_check "$1" "$2" "$3" "$4" "$5" "$6" "$7"
+				[ -n "$skipdownload" ] && mkdir -p $sdadir && ln -sf /usr/bin/zerotier-one $sdadir/$2
 			done
 		else
 			echo -e "\n$RED没有找到 $YELLOW$1 $RED的安装路径！若是通过 opkg 安装的即将通过 opkg 进行卸载$RESET" && sleep 2
 		fi
 	else
 		sdadir=${sdadir%/*}
-		[ -z "$del" ] && old_tag=$(eval $sdadir/$2 $3 2> /dev/null | sed 's/.*v/v/');[ -n "$7" ] && $7
+		[ -z "$del" ] && old_tag=$(eval $sdadir/$2 $3 2> /dev/null | sed 's/.*v/v/;s/^[^v]/v&/');[ -n "$7" ] && $7
 		[ -n "$old_tag" ] && echo -e "\n找到 $YELLOW$1 $PINK$old_tag$RESET 的安装路径：$BLUE$sdadir$RESET" || echo -e "\n找到 $YELLOW$1$RESET 的安装路径：$BLUE$sdadir$RESET"
 		sleep 2
 	fi
@@ -486,6 +506,7 @@ sda_install_remove(){
 			[ -n "$(grep domainblacklist /etc/crontabs/root 2> /dev/null)" ] && sed -i '/domainblacklist/d' /etc/crontabs/root && /etc/init.d/cron restart &> /dev/null && log "删除/etc/crontabs/root文件中的定时任务domainblacklist"
 		}
 		[ "$1" = "wakeonlan" ] && rm -rf /usr/share/perl /usr/lib/perl5/ && opkg remove wakeonlan perlbase-net perlbase-time perlbase-dynaloader perlbase-filehandle perlbase-class perlbase-getopt perlbase-io perlbase-socket perlbase-selectsaver perlbase-symbol perlbase-scalar perlbase-posix perlbase-tie perlbase-list perlbase-fcntl perlbase-xsloader perlbase-errno perlbase-bytes perlbase-base perlbase-essential perlbase-config perl &> /dev/null && sed -i '/网络唤醒/d' /etc/crontabs/root && /etc/init.d/cron restart &> /dev/null
+		[ "$1" = "zerotier" ] && rm -f /etc/config/zerotier && opkg remove zerotier &> /dev/null
 		[ -f "$autostartfileinit" ] && rm -f $autostartfileinit && log "删除自启动文件$autostartfileinit"
 		[ -L "$autostartfilerc" ] && rm -f $autostartfilerc && log "删除自启动链接文件$autostartfilerc"
 		[ -f "$downloadfileinit" ] && rm -f $downloadfileinit && log "删除自启动文件$downloadfileinit"
@@ -495,116 +516,145 @@ sda_install_remove(){
 	}
 	if [ -z "$(echo $1 | grep -oE 'aria2|vsftpd|transmission')" ];then
 		[ -z "$upxretry" -o "$upxretry" -eq 0 ] && {
-			urls="https://github.com/$5/$6/releases/latest"
-			tag_url="https://api.github.com/repos/$5/$6/releases/latest"
-			echo -e "\n即将获取 ${YELLOW}$1$RESET 最新版本号并下载" && sleep 2 && rm -f /tmp/$1.tmp && retry_count=5 && tag_name=""
-			while [ -z "$tag_name" -a $retry_count != 0 ];do
-				echo -e "\n正在获取最新 ${YELLOW}$1$RESET 版本号 ······ \c" && adtagcount=0
-				if [ "$1" = "AdGuardHome" ];then
-					while [ -z "$(echo $tag_name | grep '\-b')" -a $adtagcount -le 5 ];do
-						tag_url="https://api.github.com/repos/$5/$6/releases?per_page=1&page=$adtagcount"
+			[ "$1" != "zerotier" -o "$1" = "zerotier" -a ! -f /tmp/zerotier-one -a -z "$skipdownload" ] && {
+				[ "$1" = "zerotier" ] && opkg_test_install "unzip"
+				urls="https://github.com/$5/$6/releases/latest"
+				tag_url="https://api.github.com/repos/$5/$6/releases/latest"
+				echo -e "\n即将获取 ${YELLOW}$1$RESET 最新版本号并下载" && sleep 2 && rm -f /tmp/$1.tmp && retry_count=5 && tag_name=""
+				while [ -z "$tag_name" -a $retry_count != 0 ];do
+					echo -e "\n正在获取最新 ${YELLOW}$1$RESET 版本号 ······ \c" && adtagcount=0
+					if [ "$1" = "AdGuardHome" ];then
+						while [ -z "$(echo $tag_name | grep '\-b')" -a $adtagcount -le 5 ];do
+							tag_url="https://api.github.com/repos/$5/$6/releases?per_page=1&page=$adtagcount"
+							tag_name=$(curl --connect-timeout 3 -sk "$tag_url" | grep tag_name | cut -f4 -d '"')
+							[ "$?" = 0 ] && let adtagcount++
+						done
+					else
 						tag_name=$(curl --connect-timeout 3 -sk "$tag_url" | grep tag_name | cut -f4 -d '"')
-						[ "$?" = 0 ] && let adtagcount++
-					done
-				else
-					tag_name=$(curl --connect-timeout 3 -sk "$tag_url" | grep tag_name | cut -f4 -d '"')
-				fi
-				[ -z "$tag_name" ] && {
-					let retry_count--
-					[ $retry_count != 0 ] && echo -e "$RED获取失败！$RESET\n\n即将尝试重连······（剩余重试次数：$PINK$retry_count$RESET）" && sleep 1
-				}
-			done
-			[ -z "$tag_name" ] && {
-				echo -e "$RED获取失败！\n\n获取版本号失败！$RESET如果没有代理的话建议多尝试几次！"
-				echo -e "\n如果响应时间很短但获取失败，则是每小时内的请求次数已超过 ${PINK}github$RESET 限制，请更换 ${YELLOW}IP$RESET 或者等待一段时间后再试！" && sleep 1 && main
-			}
-			echo -e "$GREEN获取成功！$RESET当前最新版本：$PINK$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')$RESET" && sleep 2
-			[ -n "$old_tag" ] && {
-				old_tag=$(echo $old_tag | sed 's/[^0-9]//g')
-				new_tag=$(echo $tag_name | sed 's/[^0-9]//g')
-				[ "$old_tag" -ge "$new_tag" ] && {
-					echo -e "\n当前已安装最新版 $YELLOW$1 $PINK$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')$RESET ，无需更新！$RESET" && sleep 2
-					echo -e "\n$PINK是否重新下载？$RESET" && downloadnum=""
-					echo "---------------------------------------------------------"
-					echo "1. 重新下载"
-					echo "---------------------------------------------------------"
-					echo "0. 跳过下载"
-					while [ -z "$downloadnum" ];do
-						echo -ne "\n"
-						read -p "请输入对应选项的数字 > " downloadnum
-						[ -n "$(echo $downloadnum | sed 's/[0-9]//g')" -o -z "$downloadnum" ] && downloadnum="" && continue
-						[ "$downloadnum" -gt 1 ] && downloadnum="" && continue
-						[ "$downloadnum" -eq 0 ] && skipdownload=1
-					done
-				}
-			}
-			[ -z "$skipdownload" ] && {
-				echo -e "\n$PINK请选择型号进行下载：$RESET" && num=""
-				echo "---------------------------------------------------------"
-				echo -e "1. $GREEN自动检测系统型号$RESET"
-				echo "2. aarch64"
-				echo "3. arm"
-				echo "4. mips"
-				echo "5. mips64"
-				echo "6. mips64el"
-				echo "7. mipsel"
-				echo "8. x86_64"
-				echo "---------------------------------------------------------"
-				echo "0. 返回上一页"
-				echo -e "\n可以在 $SKYBLUE$urls$RESET 中查找并复制下载地址"
-				while [ -z "$num" ];do
-					echo -ne "\n"
-					read -p "请输入对应型号的数字或直接输入以 http 或 ftp 开头的下载地址 > " num
-						case "$num" in
-							1)
-								hardware_type=$(uname -m)
-								[ "$hardware_type" = "aarch64" ] && hardware_type=arm64;;
-							2)	hardware_type=arm64;;
-							3)	hardware_type=arm;;
-							4)	hardware_type=mips;;
-							5)	hardware_type=mipsle;;
-							6)	hardware_type=mips64;;
-							7)	hardware_type=mips64le;;
-							8)	hardware_type=amd64;;
-							0)	sda_install_remove "$1" "$2" "$3" "$4" "$5" "$6" "$7" "return"
-						esac
-					[ -n "$(echo $num | sed 's/[0-9]//g')" -a "${num:0:4}" != "http" -a "${num:0:3}" != "ftp" -o -z "$num" ] && num="" && continue
-					[ "${num:0:4}" != "http" -a "${num:0:3}" != "ftp" ] && [ "$num" -lt 1 -o "$num" -gt 8 ] && num="" && continue
-					[ "$1" = "qBittorrent" ] && {
-						[ "$hardware_type" = "arm64" ] && hardware_type=aarch64
-						[ "$hardware_type" = "mipsle" ] && hardware_type=mipsel
-						[ "$hardware_type" = "mips64le" ] && hardware_type=mips64el
-						[ "$hardware_type" = "amd64" ] && hardware_type=x86_64
+					fi
+					[ -z "$tag_name" ] && {
+						let retry_count--
+						[ $retry_count != 0 ] && echo -e "$RED获取失败！$RESET\n\n即将尝试重连······（剩余重试次数：$PINK$retry_count$RESET）" && sleep 1
 					}
-					[ "$1" = "AdGuardHome" ] && [ "$hardware_type" = "arm" ] && hardware_type=armv7
 				done
-				echo -e "\n下载 ${YELLOW}$1 $(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')$RESET ······" && retry_count=5 && eabi="" && softfloat="" && url=""
-				while [ ! -f /tmp/$1.tmp -a $retry_count != 0 ];do
-					[ "$hardware_type" = "arm" ] && eabi="eabi"
-					[ "${hardware_type:0:4}" = "mips" ] && softfloat="_softfloat"
-					[ "$1" = "qBittorrent" ] && url="https://github.com/c0re100/qBittorrent-Enhanced-Edition/releases/download/$tag_name/qbittorrent-enhanced-nox_$hardware_type-linux-musl${eabi}_static.zip"
-					[ "$1" = "Alist" ] && url="https://github.com/alist-org/alist/releases/download/$tag_name/alist-linux-musl$eabi-$hardware_type.tar.gz"
-					[ "$1" = "AdGuardHome" ] && url="https://github.com/AdguardTeam/AdGuardHome/releases/download/$tag_name/AdGuardHome_linux_$hardware_type$softfloat.tar.gz"
-					if [ "${num:0:4}" = "http" -o "${num:0:3}" = "ftp" ];then
-						url="$num" && echo "" && curl --connect-timeout 3 -#Lko /tmp/$1.tmp "$url"
-					else
-						github_download "$1.tmp" "$url"
-					fi
-					if [ "$?" != 0 ];then
-						rm -f /tmp/$1.tmp && let retry_count--
-						[ $retry_count != 0 ] && echo -e "\n$RED下载失败！$RESET即将尝试重连······（剩余重试次数：$PINK$retry_count$RESET）" && sleep 1
-					else
-						[ "$(wc -c < /tmp/$1.tmp)" -lt 1024 ] && rm -f /tmp/$1.tmp && echo -e "\n$RED下载失败！$RESET没有找到适用于当前系统的文件包，请手动选择型号进行重试！" && sleep 1 && main
-					fi
-				done;
-				[ ! -f /tmp/$1.tmp ] && echo -e "\n$RED下载失败！$RESET如果没有代理的话建议多尝试几次！" && sleep 1 && main
-				echo -e "\n$GREEN下载成功！$RESET即将解压安装并启动" && rm -f /tmp/$2
-				case "$1" in
-					qBittorrent)	unzip -oq /tmp/$1.tmp -d /tmp;;
-					Alist)	tar -zxf /tmp/$1.tmp -C /tmp;;
-					AdGuardHome)	tar -zxf /tmp/AdGuardHome.tmp -C /tmp && mv -f /tmp/$1 /tmp/$1.dir && mv -f /tmp/$1.dir/$1 /tmp/$1 && rm -rf /tmp/$1.dir
-				esac
-				rm -f /tmp/$1.tmp
+				[ -z "$tag_name" ] && {
+					echo -e "$RED获取失败！\n\n获取版本号失败！$RESET如果没有代理的话建议多尝试几次！"
+					echo -e "\n如果响应时间很短但获取失败，则是每小时内的请求次数已超过 ${PINK}github$RESET 限制，请更换 ${YELLOW}IP$RESET 或者等待一段时间后再试！" && sleep 1 && main
+				}
+				echo -e "$GREEN获取成功！$RESET当前最新版本：$PINK$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')$RESET" && sleep 2
+				[ -n "$old_tag" ] && {
+					new_tag=$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')
+					[ "$old_tag" \> "$new_tag" -o "$old_tag" \= "$new_tag" ] && {
+						echo -e "\n当前已安装最新版 $YELLOW$1 $PINK$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')$RESET ，无需更新！$RESET" && sleep 2
+						echo -e "\n$PINK是否重新下载？$RESET" && downloadnum=""
+						echo "---------------------------------------------------------"
+						echo "1. 重新下载"
+						echo "---------------------------------------------------------"
+						echo "0. 跳过下载"
+						while [ -z "$downloadnum" ];do
+							echo -ne "\n"
+							read -p "请输入对应选项的数字 > " downloadnum
+							[ -n "$(echo $downloadnum | sed 's/[0-9]//g')" -o -z "$downloadnum" ] && downloadnum="" && continue
+							[ "$downloadnum" -gt 1 ] && downloadnum="" && continue
+							[ "$downloadnum" -eq 0 ] && skipdownload=1
+						done
+					}
+				}
+				[ -z "$skipdownload" ] && {
+					echo -e "\n$PINK请选择型号进行下载：$RESET" && num=""
+					echo "---------------------------------------------------------"
+					echo -e "1. $GREEN自动检测系统型号$RESET"
+					echo "2. aarch64"
+					[ "$1" = zerotier ] && echo "3. arm-eabi" || echo "3. arm"
+					[ "$1" = zerotier ] && echo "4. arm-eabihf" || echo "4. x86_64"
+					echo "5. mips"
+					echo "6. mipsel"
+					echo "7. mips64"
+					echo "8. mips64el"
+					echo "---------------------------------------------------------"
+					echo "0. 返回上一页"
+					echo -e "\n可以在 $SKYBLUE$urls$RESET 中查找并复制下载地址"
+					while [ -z "$num" ];do
+						echo -ne "\n"
+						read -p "请输入对应型号的数字或直接输入以 http 或 ftp 开头的下载地址 > " num
+							case "$num" in
+								1)
+									hardware_type=$(uname -m)
+									[ "$hardware_type" = "aarch64" ] && hardware_type=arm64;;
+								2)	hardware_type=arm64;;
+								3)	hardware_type=arm;;
+								4)	hardware_type=amd64;;
+								5)	hardware_type=mips;;
+								6)	hardware_type=mipsle;;
+								7)	hardware_type=mips64;;
+								8)	hardware_type=mips64le;;
+								0)	sda_install_remove "$1" "$2" "$3" "$4" "$5" "$6" "$7" "return"
+							esac
+						[ -n "$(echo $num | sed 's/[0-9]//g')" -a "${num:0:4}" != "http" -a "${num:0:3}" != "ftp" -o -z "$num" ] && num="" && continue
+						[ "${num:0:4}" != "http" -a "${num:0:3}" != "ftp" ] && [ "$num" -lt 1 -o "$num" -gt 8 ] && num="" && continue
+						[ "$1" = "qBittorrent" ] && {
+							[ "$hardware_type" = "arm64" ] && hardware_type=aarch64
+							[ "$hardware_type" = "mipsle" ] && hardware_type=mipsel
+							[ "$hardware_type" = "mips64le" ] && hardware_type=mips64el
+							[ "$hardware_type" = "amd64" ] && hardware_type=x86_64
+						}
+						[ "$1" = "AdGuardHome" ] && [ "$hardware_type" = "arm" ] && hardware_type=armv7
+						[ "$1" = "zerotier" ] && {
+							[ "$hardware_type" = "arm64" ] && hardware_type=aarch64
+							[ "$hardware_type" = "mipsle" ] && hardware_type=mipsel
+							[ "$hardware_type" = "mips64le" ] && hardware_type=mips64el
+						}
+					done
+					echo -e "\n下载 ${YELLOW}$1 $(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')$RESET ······" && retry_count=5 && eabi="" && softfloat="" && url=""
+					while [ ! -f /tmp/$1.tmp -a $retry_count != 0 ];do
+						[ "$hardware_type" = "arm" ] && eabi="eabi"
+						[ "$1" = "zerotier" ] && [ "$hardware_type" = "amd64" ] && hardware_type=arm && eabi="eabihf"
+						[ "${hardware_type:0:4}" = "mips" ] && softfloat="_softfloat"
+						[ "$1" = "qBittorrent" ] && url="https://github.com/c0re100/qBittorrent-Enhanced-Edition/releases/download/$tag_name/qbittorrent-enhanced-nox_$hardware_type-linux-musl${eabi}_static.zip"
+						[ "$1" = "Alist" ] && url="https://github.com/$5/$6/releases/download/$tag_name/alist-linux-musl$eabi-$hardware_type.tar.gz"
+						[ "$1" = "AdGuardHome" ] && url="https://github.com/$5/$6/releases/download/$tag_name/AdGuardHome_linux_$hardware_type$softfloat.tar.gz"
+						[ "$1" = "zerotier" ] && url="https://github.com/$5/$6/releases/download/$tag_name/zerotier-one-$hardware_type-linux-musl$eabi.zip"
+						if [ "${num:0:4}" = "http" -o "${num:0:3}" = "ftp" ];then
+							url="$num" && echo "" && curl --connect-timeout 3 -#Lko /tmp/$1.tmp "$url"
+						else
+							github_download "$1.tmp" "$url"
+						fi
+						if [ "$?" != 0 ];then
+							rm -f /tmp/$1.tmp && let retry_count--
+							[ $retry_count != 0 ] && echo -e "\n$RED下载失败！$RESET即将尝试重连······（剩余重试次数：$PINK$retry_count$RESET）" && sleep 1
+						else
+							[ "$(wc -c < /tmp/$1.tmp)" -lt 1024 ] && rm -f /tmp/$1.tmp && echo -e "\n$RED下载失败！$RESET没有找到适用于当前系统的文件包，请手动选择型号进行重试！" && sleep 1 && main
+						fi
+					done;
+					[ ! -f /tmp/$1.tmp ] && echo -e "\n$RED下载失败！$RESET如果没有代理的话建议多尝试几次！" && sleep 1 && main
+					echo -e "\n$GREEN下载成功！$RESET即将解压安装并启动" && rm -f /tmp/$2 && sleep 2
+					case "$1" in
+						qBittorrent)	unzip -oq /tmp/$1.tmp -d /tmp;;
+						Alist)	tar -zxf /tmp/$1.tmp -C /tmp;;
+						AdGuardHome)	tar -zxf /tmp/$1.tmp -C /tmp && mv -f /tmp/$1 /tmp/$1.dir && mv -f /tmp/$1.dir/$1 /tmp/$1 && rm -rf /tmp/$1.dir;;
+						zerotier)
+							zerotierpw=$(cat /etc/zerotierpw 2> /dev/null)
+							[ ! -f /tmp/zerotier-one -a -z "$zerotierpw" ] && {
+								echo -e "\n编译静态二进制文件是每个人都可以自己免费完成的，需要消耗的是学习如何编译的这个过程中所花费的时间"
+								echo "“小米路由器简易安装插件脚本” 从发布至今（2024-02-09）仅仅收到一位名为 “**吉” 的网友打赏：10块钱（十分感谢这位网友）。"
+								echo "投入的时间和回报实在是完全不成正比，如果你对此功能十分需要，并且愿意使用金钱买时间的话"
+								echo -e "可以添加本人微信并打赏5元获取解压密码，或者自行编译静态二进制文件并将其重命名为$YELLOW zerotier-one$RESET 并放到 /tmp 目录下，然后重新执行本脚本"
+								echo -e "为了挣点鸡腿钱~！望理解！十分感谢！！"
+								echo -e "\n获取密码请使用微信扫码：\n"
+								echo H4sIAAAAAAAAA71UyxXDIAy7dwqNqgMHJuiAmaRtArIgQHJp3nPyzMeWbRlv77w9KK8nwXo8bO/kgn2bx0n2je8pUfbHVhP/GYD8scpvTTmu94/lyWrm2WKo/h1mDw1CwNRqzEQaSVYlIlZ2JwvbBQeQF5WXp39qiGAPvs7Ga+wAOvVl7JcKAhWAredTNnQqCkqTnRgKA5dk8czzgWteIBYswPzs4Sf4tVUW1UDp586UplBMhGYvadW/2YNiy4mKHf07LM51Lqn926sVR8d7S55yucPjJS57t5sEfR9HsoQh3mKinQWFRP9inngkhDrw7vRAdLj8d1mpiy6qPZsbM31I1mBuDPH+Lo/jfQAKj+dbggcAAA== | base64 -d | gzip -d
+							}
+							unzip -P $zerotierpw -oq /tmp/$1.tmp -d /tmp 2> /dev/null
+							while [ ! -f /tmp/zerotier-one ];do
+								echo -ne "\n"
+								read -p "请输入正确的解压密码（输入 0 返回主页面） > " zerotierpw
+								[ "$zerotierpw" = 0 ] && rm -f /tmp/$1.tmp && main
+								unzip -P $zerotierpw -oq /tmp/$1.tmp -d /tmp 2> /dev/null
+							done
+							echo $zerotierpw > /etc/zerotierpw
+							;;
+					esac
+					rm -f /tmp/$1.tmp
+				}
 			}
 		}
 		if [ "$upxneeded" = 1 ];then
@@ -727,6 +777,18 @@ sda_install_remove(){
 			fi
 			$sdadir/$2 -w $sdadir &> /dev/null &
 		}
+		[ "$1" = "zerotier" ] && {
+			if [ -f $sdadir/zerotier-one.port ];then
+				defineport=$(cat $sdadir/zerotier-one.port)
+				newdefineport=$defineport
+				while [ -n "$(netstat -lnWp | grep ":$newdefineport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdefineport++;sleep 1;done
+				sed -i "s/$defineport$/$newdefineport/" $sdadir/zerotier-one.port
+			else
+				newdefineport=9993
+				while [ -n "$(netstat -lnWp | grep ":$newdefineport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdefineport++;sleep 1;done
+			fi
+			$sdadir/$2 -d $sdadir -p$newdefineport &> /dev/null
+		}
 		runtimecount=0 && [ -z "$tmpdir" ] && {
 			[ -f "$downloadfileinit" ] && rm -f $downloadfileinit && log "删除自启动文件$downloadfileinit"
 			[ -L "$downloadfilerc" ] && rm -f $downloadfilerc && log "删除自启动链接文件$downloadfilerc"
@@ -765,26 +827,69 @@ sda_install_remove(){
 					fi
 				}
 			}
-			echo -e "}\n\nstop() {\n\tservice_stop $sdadir/$2\n}" >> $autostartfileinit && chmod 755 $autostartfileinit && log "新建自启动文件$autostartfileinit"
+			[ "$1" = "zerotier" ] && {
+				[ -z "$(ls $sdadir/networks.d 2> /dev/null)" ] && {
+					echo -e "\n$PINK请选择是否马上添加并连接到 ZeroTier 网络中：$RESET"
+					echo "---------------------------------------------------------" && num=""
+					echo "1. 确认添加"
+					echo "---------------------------------------------------------"
+					echo "0. 返回主页面"
+					while [ -z "$num" ];do
+						echo -ne "\n"
+						read -p "请输入对应选项的数字 > " num
+						[ -n "$(echo $num | sed 's/[0-9]//g')" -o -z "$num" ] && num="" && continue
+						[ "$num" -eq 0 ] && main
+					done
+					echo -e "\n$RED后面的设置过程需要配合$YELLOW zerotier $RED网页端（${SKYBLUE}https://my.zerotier.com/$RED）进行（不会的请百度搜索关键字：${YELLOW}zerotier 授权$RED）$RESET" && NetworkID=""
+					while [ -z "$NetworkID" ];do
+						echo -ne "\n"
+						read -p "请输入 $1 网页端中的 Network ID > " NetworkID
+						[ "$NetworkID" = 0 ] && main
+						echo -ne "\n"
+						$sdadir/zerotier-one -q -D$sdadir join $NetworkID
+						[ "$?" != 0 ] && echo -e "\n$RED加入失败！请重新输入！$RESET" && NetworkID=""
+					done
+					echo -e "\n$GREEN加入成功！$RESET请在$YELLOW zerotier 网页端$RESET进行设备授权以允许连接！正在等待授权中 ······" && sleep 3
+					while [ -z "$(ifconfig | awk '{print $1}' | grep ^zt) " -o -z "$(ifconfig $(ifconfig | awk '{print $1}' | grep ^zt) | grep Mask | grep -oE [0-9.]{1,15})" ];do sleep 1;done
+					echo -e "\n$GREEN连接成功！$RESET请在$YELLOW zerotier 网页端$PINK Add Routes$RESET 选项中的$YELLOW Destination$RESET 输入 $PINK$(ifconfig br-lan | sed -n 2p | grep -oE [0-9.]{1,15} | head -1 | sed 's/\.[0-9]*$/.0/')/24$RESET ，${YELLOW}Via$RESET 输入 $PINK$(ifconfig $(ifconfig | awk '{print $1}' | grep ^zt) | sed -n 2p | grep -oE [0-9.]{1,15} | head -1)$RESET 并保存$YELLOW（Submit）$RESET即可使用！"
+					echo -e "\n$RED若要手动更改$YELLOW zerotier $RED分配给本机的$YELLOW IP$RED， 请在更改之前先删除上一步操作的路由表！！否则整个局域网网络会断开！谨记！！！$RESET"
+					echo -e "\n$RED若真的局域网网络断开可以使用手机进行网页登录$YELLOW zerotier 网页端 $RED并删除路由表即可$RESET" && sleep 3
+				}
+				while [ -z "$(ifconfig | awk '{print $1}' | grep ^zt)" ];do sleep 1;done
+				echo -e "\t$sdadir/$2 -d $sdadir -p$newdefineport\n\tiptables -I FORWARD -o $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口出口\" -j ACCEPT 2> /dev/null\n\tiptables -I FORWARD -i $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口入口\" -j ACCEPT 2> /dev/null\n\tiptables -t nat -I POSTROUTING -o $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口出口钳制\" -j MASQUERADE 2> /dev/null" >> $autostartfileinit
+				[ -n "$tmpdir" -a -z "$skipdownload" ] && echo -e "unzip -P $(cat /etc/zerotierpw 2> /dev/null) -oq /tmp/$1.tmp -d /tmp 2> /dev/null && mv -f /tmp/$2 /tmp/XiaomiSimpleInstallBox/$2" >> $downloadfileinit
+			}
+			echo -e "}\n\nstop() {\n\tservice_stop $sdadir/$2" >> $autostartfileinit
+			[ "$1" = "zerotier" ] && {
+				echo -e "\tiptables -D FORWARD -o $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口出口\" -j ACCEPT 2> /dev/null\n\tiptables -D FORWARD -i $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口入口\" -j ACCEPT 2> /dev/null\n\tiptables -t nat -D POSTROUTING -o $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口出口钳制\" -j MASQUERADE 2> /dev/null" >> $autostartfileinit
+				while [ -n "$(pidof $2)" ];do killpid $(pidof $2 | awk '{print $1}');done
+				while [ -n "$(iptables -S | grep ZeroTier | head -1)" ];do eval iptables $(iptables -S | grep ZeroTier | sed 's/-A/-D/' | head -1);done
+				while [ -n "$(iptables -t nat -S | grep ZeroTier | head -1)" ];do eval iptables -t nat $(iptables -t nat -S | grep ZeroTier | sed 's/-A/-D/' | head -1);done
+			}
+			echo -e "}" >> $autostartfileinit && chmod 755 $autostartfileinit && log "新建自启动文件$autostartfileinit"
 			ln -sf $autostartfileinit $autostartfilerc && log "新建自启动链接文件$autostartfilerc并链接到$autostartfileinit" && chmod 777 $autostartfilerc && $autostartfileinit start &> /dev/null
 			[ -n "$tmpdir" -a -z "$skipdownload" ] && {
 				echo -e "rm -f /tmp/$1.tmp\nchmod 755 /tmp/XiaomiSimpleInstallBox/$2\netc/init.d/$1 restart &> /dev/null\nrm -f /tmp/download$1file.sh\nEOF\n\tchmod 755 /tmp/download$1file.sh\n\t/tmp/download$1file.sh &\n}" >> $downloadfileinit && chmod 755 $downloadfileinit && log "新建自启动文件$downloadfileinit"
 				ln -sf $downloadfileinit $downloadfilerc && log "新建自启动链接文件$downloadfilerc并链接到$downloadfileinit" && chmod 777 $downloadfilerc
 			}
-			echo -e "\n$YELLOW$1$RESET 端口转发规则 $GREEN已全部更新$RESET，即将重启防火墙 ······" && sleep 2 && /etc/init.d/firewall restart &> /dev/null
-			echo -e "\n${YELLOW}$1 $PINK$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/') $GREEN已运行$RESET并设置为$YELLOW开机自启动！$RESET"
-			echo -e "\n管理页面地址：$SKYBLUE$hostip:$newdefineport$RESET$DNSINFO"
-			ipv4=$(curl --connect-timeout 3 -sLk v4.ident.me)
-			[ -n "$ipv4" ] && echo -e "\n外网管理页面地址：$SKYBLUE$ipv4:$newdefineport$RESET"
-			[ -n "$newuser" ] && echo -e "\n初始账号：${PINK}admin$RESET 初始密码：${PINK}12345678$RESET"
-			[ "$1" = "Alist" ] && echo -e "\n官方使用指南：${SKYBLUE}https://alist.nn.ci/zh/$RESET"
+			if [ "$1" != "zerotier" ];then
+				echo -e "\n$YELLOW$1$RESET 端口转发规则 $GREEN已全部更新$RESET，即将重启防火墙 ······" && sleep 2 && /etc/init.d/firewall restart &> /dev/null
+				echo -e "\n${YELLOW}$1 $PINK$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/') $GREEN已运行$RESET并设置为$YELLOW开机自启动！$RESET"
+				echo -e "\n管理页面地址：$SKYBLUE$hostip:$newdefineport$RESET$DNSINFO"
+				ipv4=$(curl --connect-timeout 3 -sLk v4.ident.me)
+				[ -n "$ipv4" ] && echo -e "\n外网管理页面地址：$SKYBLUE$ipv4:$newdefineport$RESET"
+				[ -n "$newuser" ] && echo -e "\n初始账号：${PINK}admin$RESET 初始密码：${PINK}12345678$RESET"
+				[ "$1" = "Alist" ] && echo -e "\n官方使用指南：${SKYBLUE}https://alist.nn.ci/zh/$RESET"
+			else
+				echo -e "\n${YELLOW}$1$PINK v$($sdadir/$2 -v) $GREEN已运行$RESET并设置为$YELLOW开机自启动！$RESET"
+			fi
 		else
 			echo -e "\n$RED启动失败！$RESET请下载适用于当前系统的文件包！"
 			[ -f "$autostartfileinit" ] && rm -f $autostartfileinit && log "删除自启动文件$autostartfileinit"
 			[ -L "$autostartfilerc" ] && rm -f $autostartfilerc && log "删除自启动链接文件$autostartfilerc"
 			[ -f "$downloadfileinit" ] && rm -f $downloadfileinit && log "删除自启动文件$downloadfileinit"
 			[ -L "$downloadfilerc" ] && rm -f $downloadfilerc && log "删除自启动链接文件$downloadfilerc"
-			[ "$adguardhomednsport" = 53 ] && mv -f /etc/config/dhcp.backup /etc/config/dhcp && /etc/init.d/dnsmasq restart &> /dev/null && log "恢复/etc/config/dhcp.backup文件并改名为dhcp"
+			[ "$1" = "AdGuardHome" -a "$adguardhomednsport" = 53 ] && mv -f /etc/config/dhcp.backup /etc/config/dhcp && /etc/init.d/dnsmasq restart &> /dev/null && log "恢复/etc/config/dhcp.backup文件并改名为dhcp"
 		fi
 	else
 		while [ -n "$(pidof $3)" ];do /etc/init.d/$1 stop &> /dev/null;done
@@ -900,7 +1005,7 @@ domainblacklist_update(){
 }
 main(){
 	num="$1" && [ -z "$num" ] && {
-		echo -e "\n$YELLOW=========================================================$RESET" && 
+		echo -e "\n$YELLOW=========================================================$RESET" &&
 		echo -e "\n$PINK\t\t[[  这里以下是主页面  ]]$RESET"
 		echo -e "\n$GREEN=========================================================$RESET"
 		echo -e "\n$PINK请输入你的选项：$RESET"
@@ -913,6 +1018,7 @@ main(){
 		echo -e "6. $RED下载$RESET并$GREEN启动$RESET${YELLOW}Transmission$RESET（PT 下载神器）"
 		echo -e "7. $GREEN添加$RESET或$RED删除$RESET设备禁止访问网页$RED黑名单$RESET（针对某个设备禁止访问黑名单中的网页）"
 		echo -e "8. $GREEN实时$RESET或$RED定时$YELLOW网络唤醒局域网内设备$RESET"
+		echo -e "9. $RED更新或下载$RESET并$GREEN启动$RESET最新版${YELLOW}ZeroTier-One$RESET（老牌免费内网穿透神器）"
 		echo -e "\n99. $RED$BLINK给作者打赏支持$RESET"
 		echo "---------------------------------------------------------"
 		echo -e "del+ID. 一键删除对应选项插件 如：${YELLOW}del1$RESET"
@@ -929,9 +1035,9 @@ main(){
 		echo -ne "\n"
 		read -p "请输入对应选项的数字 > " num
 		[ "$num" = 99 ] && break
-		[ "${num:0:3}" = "del" ] && [ -n "${num:3}" ] && [ -z "$(echo ${num:3} | sed 's/[0-9]//g')" ] && [ "${num:3}" -ge 1 -a "${num:3}" -le 8 ] && break
+		[ "${num:0:3}" = "del" ] && [ -n "${num:3}" ] && [ -z "$(echo ${num:3} | sed 's/[0-9]//g')" ] && [ "${num:3}" -gt 0 -a "${num:3}" -le 9 ] && break
 		[ -n "$(echo $num | sed 's/[0-9]//g')" -o -z "$num" ] && num="" && continue
-		[ "$num" -lt 0 -o "$num" -gt 8 ] && num="" && continue
+		[ "$num" -lt 0 -o "$num" -gt 9 ] && num="" && continue
 		[ "$num" -eq 0 ] && {
 			echo -e "\n$GREEN=========================================================$RESET"
 			echo -e "\n$PINK\t[[  已退出小米路由器简易安装插件脚本  ]]$RESET"
@@ -952,7 +1058,8 @@ main(){
 			5)	plugin="vsftpd";pluginfile=".notexist";;
 			6)	plugin="transmission";pluginfile="settings.json";;
 			7)	plugin="设备禁止访问网页黑名单";pluginfile=".notexist";;
-			8)	plugin="wakeonlan";pluginfile=".notexist"
+			8)	plugin="wakeonlan";pluginfile=".notexist";;
+			9)	plugin="zerotier";pluginfile="zerotier-one";;
 		esac
 		echo -e "\n$PINK确认一键卸载 $plugin 吗？（若确认所有配置文件将会全部删除）$RESET" && num=""
 		echo "---------------------------------------------------------"
@@ -1042,6 +1149,7 @@ main(){
 				echo -e "\n$SKYBLUE$devmac$GREEN$devname$YELLOW网页黑名单规则 $SKYBLUE$domain $GREEN添加成功！$RESET" && sleep 1 && domainblacklist_update "reload" && domain=""
 			done;;
 		8)	opkg_test_install "wakeonlan";;
+		9)	sda_install_remove "zerotier" "zerotier-one" "-v" "4MB" "xilaochengv" "ZeroTierOne";;
 		99)
 			echo -e "\n$RED$BLINK十分感谢您的支持！！！！！！！！$RESET\n\n$YELLOW微信扫码：$RESET\n"
 			echo H4sIAAAAAAAAA71UwQ3DMAj8d4oblQcPJuiAmaRSHMMZYzcvS6hyXAPHcXB97Tpon5PJcj5cX2XDfS3wL2mW3i38FhkMwHNqoaSb9YP291p7rSInTCneDRugbLr0q7uhlbX7lkUwxxVsfctaMMW/2a87YPD01e+yGiF6onHq/MAvlFwGUO2AMW7VFwODFGolOMBToaU6d1UEAYwp+jtCN9dxdsppCr4Q4N0F5EbiEiKS/P5MRupGKMGIFp4Jv8jv1lzNyiLMg3QcEc03CMI6U70PImYSU9d2nhxLttkkYKF01fZ/Q9n6Cvu0D1i7gd1rYQZjG2ynYrtL5md8r5P7C7YO2PF8PwRFQamaBwAA | base64 -d | gzip -d
@@ -1049,7 +1157,8 @@ main(){
 			echo H4sIAAAAAAAAA71USQ7EMAi7zyv8VA4c8oI+sC8ZqQ3gLNC5TCVUKSlgsAnn0c4X7fMm2IyH81A2XNf3wb0Et2d4J3EJQgMog/Rw0Pn66uKdZyRsO3tJYp5qaEij9hrozpolV662nz17EV1igVgQUBPEDQy7Owh+6sYLE+4DlF24I2VYLJVKgRQRzpG1EyJdhYPhB7Wq/K2zINwLaM44w9wKT0mlhmSMjeKLN+Uj5koGuSlKIyBnKtA34yBLaJthCu1nFVkmUy6YtKEEHjRJ94D6NIxyBFFtXABJ9mEbCFV8/xD/qKPV72G3B+Ak82PtzCB21jQCT296tz/WFcESrZeTQ/4u/mqv430B27+RdoQHAAA= | base64 -d | gzip -d && echo "" && exit
 	esac
 }
-echo -e "MIRRORS=\"$(echo $MIRRORS)\"\n[ -f $0 ] && {\n\tgithub_download(){\n\t\tfor MIRROR in \$MIRRORS;do\n\t\t\tcurl --connect-timeout 3 -sLko /tmp/\$1 \"\$MIRROR\$2\"\n\t\t\tif [ \"\$?\" = 0 ];then\n\t\t\t\t[ \$(wc -c < /tmp/\$1) -lt 1024 ] && rm -f /tmp/\$1 || break\n\t\t\telse\n\t\t\t\trm -f /tmp/\$1\n\t\t\tfi\n\t\tdone\n\t\t[ -f /tmp/\$1 ] && return 0 || return 1\n\t}\n\trm -f /tmp/XiaomiSimpleInstallBox.sh.tmp && for tmp in \$(ps | grep _update_check | awk '{print \$1}');do [ \"\$tmp\" != \"\$\$\" ] && killpid \$tmp;done\n\twhile [ ! -f /tmp/XiaomiSimpleInstallBox.sh.tmp ];do\n\t\tgithub_download \"XiaomiSimpleInstallBox.sh.tmp\" \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox.sh\"\n\t\t[ \"\$?\" != 0 ] && {\n\t\t\tcurl --connect-timeout 3 -sLko /tmp/XiaomiSimpleInstallBox.sh.tmp \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox.sh\"\n\t\t\t[ \"\$?\" != 0 ] && rm -f /tmp/XiaomiSimpleInstallBox.sh.tmp\n\t\t}\n\tdone\n\tif [ \"\$(sed -n '1p' $0 | sed 's/version=//')\" \< \"\$(sed -n '1p' /tmp/XiaomiSimpleInstallBox.sh.tmp | sed 's/version=//')\" ];then\n\t\t[ \$(sed -n '2p' /tmp/XiaomiSimpleInstallBox.sh.tmp | grep -o false) ] && {\n\t\t\trm -f /tmp/XiaomiSimpleInstallBox-change.log\n\t\t\twhile [ ! -f /tmp/XiaomiSimpleInstallBox-change.log ];do\n\t\t\t\tgithub_download \"XiaomiSimpleInstallBox-change.log\" \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox-change.log\"\n\t\t\t\t[ \"\$?\" != 0 ] && {\n\t\t\t\t\tcurl --connect-timeout 3 -sLko /tmp/XiaomiSimpleInstallBox-change.log \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox-change.log\"\n\t\t\t\t\t[ \"\$?\" != 0 ] && rm -f /tmp/XiaomiSimpleInstallBox-change.log\n\t\t\t\t}\n\t\t\tdone\n\t\t\tmv -f /tmp/XiaomiSimpleInstallBox-change.log ${0%/*}/XiaomiSimpleInstallBox-change.log\n\t\t}\n\t\techo -e \"\\\n$PINK===============================================================$RESET\"\n\t\techo -e \"\\\n$YELLOW小米路由器$GREEN简易安装插件脚本 $PINK\$(sed -n '1p' $0 | sed 's/version=//') $BLUE已自动更新到最新版：$PINK\$(sed -n '1p' /tmp/XiaomiSimpleInstallBox.sh.tmp | sed 's/version=//') ，$BLUE请重新运行脚本$RESET\"\n\t\techo -e \"\\\n$PINK===============================================================$RESET\"\n\t\tmv -f $0 $0.\$(sed -n '1p' $0 | sed 's/version=//').backup\n\t\tmv -f /tmp/XiaomiSimpleInstallBox.sh.tmp $0\n\t\tchmod 755 $0\n\telse\n\t\trm -f /tmp/XiaomiSimpleInstallBox.sh.tmp\n\tfi\n}\n[ ! -f $0 -o -z \"\$(grep \"\$MIRRORS\" /etc/profile 2> /dev/null)\" ] && sed -i '/opkg.update/d' /etc/profile 2> /dev/null && sed -i '/XiaomiSimpleInstallBox.sh/d' /etc/profile 2> /dev/null\n[ -z \"\$(grep $0 /etc/profile 2> /dev/null)\" ] && {\n\tsed -n '1,44p' /tmp/XiaomiSimpleInstallBox_update_check > /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\tsed -i 's/\\\t/\\\\\\\t/g' /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\tsed -i 's/\\\"/\\\\\\\\\\\"/g' /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\tsed -i 's/\\\$/\\\\\\\\\\$/g' /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\tsed -i 's/\\\\\\\n/\\\\\\\\\\\\\\\\\\\\\\\n/' /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\tsed -i ':i;N;s|\\\n|\\\\\\\n|;ti' /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\tsed -i 's/ ，\e\[1;34m请重新运行脚本//' /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\techo \"echo -e \\\"\$(cat /tmp/XiaomiSimpleInstallBox_update_check.tmp)\\\nrm -f /tmp/XiaomiSimpleInstallBox_update_check\\\" > /tmp/XiaomiSimpleInstallBox_update_check && chmod 755 /tmp/XiaomiSimpleInstallBox_update_check && (exec /tmp/XiaomiSimpleInstallBox_update_check &)\" >> /etc/profile 2> /dev/null\n}\nrm -f /tmp/XiaomiSimpleInstallBox_update_check /tmp/XiaomiSimpleInstallBox_update_check.tmp" > /tmp/XiaomiSimpleInstallBox_update_check && chmod 755 /tmp/XiaomiSimpleInstallBox_update_check && /tmp/XiaomiSimpleInstallBox_update_check &
+sed -i '/XiaomiSimpleInstallBox.sh/d' /etc/profile 2> /dev/null
+echo -e "MIRRORS=\"$(echo $MIRRORS)\"\n[ -f $0 ] && {\n\tgithub_download(){\n\t\tfor MIRROR in \$MIRRORS;do\n\t\t\tcurl --connect-timeout 3 -sLko /tmp/\$1 \"\$MIRROR\$2\"\n\t\t\tif [ \"\$?\" = 0 ];then\n\t\t\t\t[ \$(wc -c < /tmp/\$1) -lt 1024 ] && rm -f /tmp/\$1 || break\n\t\t\telse\n\t\t\t\trm -f /tmp/\$1\n\t\t\tfi\n\t\tdone\n\t\t[ -f /tmp/\$1 ] && return 0 || return 1\n\t}\n\trm -f /tmp/XiaomiSimpleInstallBox.sh.tmp && for tmp in \$(ps | grep _update_check | awk '{print \$1}');do [ \"\$tmp\" != \"\$\$\" ] && killpid \$tmp;done\n\twhile [ ! -f /tmp/XiaomiSimpleInstallBox.sh.tmp ];do\n\t\tgithub_download \"XiaomiSimpleInstallBox.sh.tmp\" \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox.sh\"\n\t\t[ \"\$?\" != 0 ] && {\n\t\t\tcurl --connect-timeout 3 -sLko /tmp/XiaomiSimpleInstallBox.sh.tmp \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox.sh\"\n\t\t\t[ \"\$?\" != 0 ] && rm -f /tmp/XiaomiSimpleInstallBox.sh.tmp\n\t\t}\n\tdone\n\tif [ \"\$(sed -n '1p' $0 | sed 's/version=//')\" \< \"\$(sed -n '1p' /tmp/XiaomiSimpleInstallBox.sh.tmp | sed 's/version=//')\" ];then\n\t\t[ \$(sed -n '2p' /tmp/XiaomiSimpleInstallBox.sh.tmp | grep -o false) ] && {\n\t\t\trm -f /tmp/XiaomiSimpleInstallBox-change.log\n\t\t\twhile [ ! -f /tmp/XiaomiSimpleInstallBox-change.log ];do\n\t\t\t\tgithub_download \"XiaomiSimpleInstallBox-change.log\" \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox-change.log\"\n\t\t\t\t[ \"\$?\" != 0 ] && {\n\t\t\t\t\tcurl --connect-timeout 3 -sLko /tmp/XiaomiSimpleInstallBox-change.log \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox-change.log\"\n\t\t\t\t\t[ \"\$?\" != 0 ] && rm -f /tmp/XiaomiSimpleInstallBox-change.log\n\t\t\t\t}\n\t\t\tdone\n\t\t\tmv -f /tmp/XiaomiSimpleInstallBox-change.log ${0%/*}/XiaomiSimpleInstallBox-change.log\n\t\t}\n\t\techo -e \"\\\n$PINK===============================================================$RESET\"\n\t\techo -e \"\\\n$YELLOW小米路由器$GREEN简易安装插件脚本 $PINK\$(sed -n '1p' $0 | sed 's/version=//') $BLUE已自动更新到最新版：$PINK\$(sed -n '1p' /tmp/XiaomiSimpleInstallBox.sh.tmp | sed 's/version=//') ，$BLUE请重新运行脚本$RESET\"\n\t\techo -e \"\\\n$PINK===============================================================$RESET\"\n\t\tmv -f $0 $0.\$(sed -n '1p' $0 | sed 's/version=//').backup\n\t\tmv -f /tmp/XiaomiSimpleInstallBox.sh.tmp $0\n\t\tchmod 755 $0\n\telse\n\t\trm -f /tmp/XiaomiSimpleInstallBox.sh.tmp\n\tfi\n}\n[ ! -f $0 -o -z \"\$(grep \"\$MIRRORS\" /etc/profile 2> /dev/null)\" ] && sed -i '/XiaomiSimpleInstallBox.sh/d' /etc/profile 2> /dev/null\n[ -z \"\$(grep $0 /etc/profile 2> /dev/null)\" ] && {\n\tsed -n '1,44p' /tmp/XiaomiSimpleInstallBox_update_check > /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\tsed -i 's/\\\t/\\\\\\\t/g' /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\tsed -i 's/\\\"/\\\\\\\\\\\"/g' /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\tsed -i 's/\\\$/\\\\\\\\\\$/g' /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\tsed -i 's/\\\\\\\n/\\\\\\\\\\\\\\\\\\\\\\\n/' /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\tsed -i ':i;N;s|\\\n|\\\\\\\n|;ti' /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\tsed -i 's/ ，\e\[1;34m请重新运行脚本//' /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\techo \"echo -e \\\"\$(cat /tmp/XiaomiSimpleInstallBox_update_check.tmp)\\\nrm -f /tmp/XiaomiSimpleInstallBox_update_check\\\" > /tmp/XiaomiSimpleInstallBox_update_check && chmod 755 /tmp/XiaomiSimpleInstallBox_update_check && (exec /tmp/XiaomiSimpleInstallBox_update_check &)\" >> /etc/profile 2> /dev/null\n}\nrm -f /tmp/XiaomiSimpleInstallBox_update_check /tmp/XiaomiSimpleInstallBox_update_check.tmp" > /tmp/XiaomiSimpleInstallBox_update_check && chmod 755 /tmp/XiaomiSimpleInstallBox_update_check && /tmp/XiaomiSimpleInstallBox_update_check &
 
 #修复v1.0.2版本时的设备网页黑名单重启后不会生效问题
 [ -f /etc/domainblacklist ] && [ -z "$(sed -n 12p /etc/domainblacklist 2> /dev/null | grep '(')" ] && sed -i "12c\\\t[ -z \"\$(iptables -S FORWARD | grep -e -i | head -1 | grep DOMAIN)\" ] && reload" /etc/domainblacklist && /etc/domainblacklist
