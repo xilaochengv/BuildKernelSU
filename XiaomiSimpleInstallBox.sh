@@ -1,4 +1,4 @@
-version=v1.0.6
+version=v1.0.6a
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=false
 hardware_release=$(cat /etc/openwrt_release | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_arch=$(cat /etc/openwrt_release | grep ARCH | awk -F "'" '{print $2}')
@@ -515,6 +515,10 @@ sda_install_remove(){
 		echo -e "\n$YELLOW$1 $RED已一键删除！$RESET" && sleep 1 && main
 	}
 	if [ -z "$(echo $1 | grep -oE 'aria2|vsftpd|transmission')" ];then
+		[ "$1" = "zerotier" ] && [ -L "$sdadir/$2" ] && [ -n "$(file $sdadir/$2 | awk '{print $5}' | grep -oE '^/tmp/|^/var/')" ] && [ -z "$(cat $sdadir/networks.d/$(ls $sdadir/networks.d/ 2> /dev/null | grep -v local) 2> /dev/null)" -o ! -f /etc/init.d/Donwnload$1 ] && {			
+			echo -e "\n${YELLOW}ZeroTier-one $RED在使用临时目录时必须在首次下载安装时设置好网络！$RESET"
+			sda_install_remove "$1" "$2" "del"
+		}
 		[ -z "$upxretry" -o "$upxretry" -eq 0 ] && {
 			[ "$1" != "zerotier" -o "$1" = "zerotier" -a ! -f /tmp/zerotier-one -a -z "$skipdownload" ] && {
 				[ "$1" = "zerotier" ] && opkg_test_install "unzip"
@@ -636,7 +640,7 @@ sda_install_remove(){
 							zerotierpw=$(cat /etc/zerotierpw 2> /dev/null)
 							[ ! -f /tmp/zerotier-one -a -z "$zerotierpw" ] && {
 								echo -e "\n编译静态二进制文件是每个人都可以自己免费完成的，需要消耗的是学习如何编译的这个过程中所花费的时间"
-								echo "“小米路由器简易安装插件脚本” 从发布至今（2024-02-09）仅仅收到一位名为 “**吉” 的网友打赏：10块钱（十分感谢这位网友）。"
+								echo "“小米路由器简易安装插件脚本” 从发布至今（2024-02-08）仅仅收到一位名为 “**吉” 的网友打赏：10块钱（十分感谢这位网友）。"
 								echo "投入的时间和回报实在是完全不成正比，如果你对此功能十分需要，并且愿意使用金钱买时间的话"
 								echo -e "可以添加本人微信并打赏5元获取解压密码，或者自行编译静态二进制文件并将其重命名为$YELLOW zerotier-one$RESET 并放到 /tmp 目录下，然后重新执行本脚本"
 								echo -e "为了挣点鸡腿钱~！望理解！十分感谢！！"
@@ -644,8 +648,8 @@ sda_install_remove(){
 								echo H4sIAAAAAAAAA71UyxXDIAy7dwqNqgMHJuiAmaRtArIgQHJp3nPyzMeWbRlv77w9KK8nwXo8bO/kgn2bx0n2je8pUfbHVhP/GYD8scpvTTmu94/lyWrm2WKo/h1mDw1CwNRqzEQaSVYlIlZ2JwvbBQeQF5WXp39qiGAPvs7Ga+wAOvVl7JcKAhWAredTNnQqCkqTnRgKA5dk8czzgWteIBYswPzs4Sf4tVUW1UDp586UplBMhGYvadW/2YNiy4mKHf07LM51Lqn926sVR8d7S55yucPjJS57t5sEfR9HsoQh3mKinQWFRP9inngkhDrw7vRAdLj8d1mpiy6qPZsbM31I1mBuDPH+Lo/jfQAKj+dbggcAAA== | base64 -d | gzip -d
 							}
 							unzip -P $zerotierpw -oq /tmp/$1.tmp -d /tmp 2> /dev/null
-							while [ ! -f /tmp/zerotier-one ];do
-								echo -ne "\n"
+							while [ ! -f /tmp/zerotier-one ];do								
+								echo -ne "\n" && rm -f /etc/zerotierpw
 								read -p "请输入正确的解压密码（输入 0 返回主页面） > " zerotierpw
 								[ "$zerotierpw" = 0 ] && rm -f /tmp/$1.tmp && main
 								unzip -P $zerotierpw -oq /tmp/$1.tmp -d /tmp 2> /dev/null
@@ -829,17 +833,19 @@ sda_install_remove(){
 			}
 			[ "$1" = "zerotier" ] && {
 				[ -z "$(ls $sdadir/networks.d 2> /dev/null)" ] && {
-					echo -e "\n$PINK请选择是否马上添加并连接到 ZeroTier 网络中：$RESET"
-					echo "---------------------------------------------------------" && num=""
-					echo "1. 确认添加"
-					echo "---------------------------------------------------------"
-					echo "0. 返回主页面"
-					while [ -z "$num" ];do
-						echo -ne "\n"
-						read -p "请输入对应选项的数字 > " num
-						[ -n "$(echo $num | sed 's/[0-9]//g')" -o -z "$num" ] && num="" && continue
-						[ "$num" -eq 0 ] && main
-					done
+					[ -z "$tmpdir" ] && {
+						echo -e "\n$PINK请选择是否马上添加并连接到 ZeroTier 网络中：$RESET"
+						echo "---------------------------------------------------------" && num=""
+						echo "1. 确认添加"
+						echo "---------------------------------------------------------"
+						echo "0. 返回主页面"
+						while [ -z "$num" ];do
+							echo -ne "\n"
+							read -p "请输入对应选项的数字 > " num
+							[ -n "$(echo $num | sed 's/[0-9]//g')" -o -z "$num" ] && num="" && continue
+							[ "$num" -eq 0 ] && main
+						done
+					}
 					echo -e "\n$RED后面的设置过程需要配合$YELLOW zerotier $RED网页端（${SKYBLUE}https://my.zerotier.com/$RED）进行（不会的请百度搜索关键字：${YELLOW}zerotier 授权$RED）$RESET" && NetworkID=""
 					while [ -z "$NetworkID" ];do
 						echo -ne "\n"
@@ -1024,7 +1030,7 @@ main(){
 		echo -e "del+ID. 一键删除对应选项插件 如：${YELLOW}del1$RESET"
 		echo -e "0. 退出$YELLOW小米路由器$GREEN简易安装插件脚本$RESET"
 		[ "$changlogshowed" != "true" -a -f ${0%/*}/XiaomiSimpleInstallBox-change.log ] && {
-			sed -i '2s/changlogshowed=.*/changlogshowed=true/' $0
+			sed -i '2s/changlogshowed=.*/changlogshowed=true/' $0 && changlogshowed=true
 			echo -e "\n$PINK=========================================================$RESET"
 			echo -e "\n$YELLOW\t小米路由器$GREEN简易安装插件脚本$YELLOW更新日志$RESET"
 			cat ${0%/*}/XiaomiSimpleInstallBox-change.log
