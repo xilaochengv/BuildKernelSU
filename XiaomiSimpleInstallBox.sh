@@ -1,4 +1,4 @@
-version=v1.0.6a
+version=v1.0.6b
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=false
 hardware_release=$(cat /etc/openwrt_release | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_arch=$(cat /etc/openwrt_release | grep ARCH | awk -F "'" '{print $2}')
@@ -436,18 +436,22 @@ sda_install_remove(){
 		}
 	}
 	for tmplist in $sdalist;do
-		sdadir=$(find $tmplist -name $2)
-		for name in $sdadir;do
-			[ -f "$name" -a -n "$(echo $name | grep -v '\.d')" -o -L "$name" -a -n "$(echo $name | grep -v '\.d')" ] && {
-				sdadir=$name
-				[ -L "$sdadir" -a -n "$(echo $name | grep -v '\.d')" ] && {
-					tmpdir="/tmp/XiaomiSimpleInstallBox"
-					[ "$1" = "zerotier" ] && skipdownload=1
-				}
-				break
+		for dirname in $(ls $tmplist);do
+			[ -d "$tmplist/$dirname" -a "$dirname" != "docker" ] && {
+				sdadir=$(find $tmplist/$dirname -name $2)
+				for name in $sdadir;do
+					[ -f "$name" -a -n "$(echo $name | grep -v '\.d')" -o -L "$name" -a -n "$(echo $name | grep -v '\.d')" ] && {
+						sdadir=$name
+						[ -L "$sdadir" -a -n "$(echo $name | grep -v '\.d')" ] && {
+							tmpdir="/tmp/XiaomiSimpleInstallBox"
+							[ "$1" = "zerotier" ] && skipdownload=1
+						}
+						break
+					}
+				done
+				[ -f "$sdadir" -a -n "$(echo $name | grep -v '\.d')" -o -L "$sdadir" -a -n "$(echo $name | grep -v '\.d')" ] && break || sdadir=""
 			}
 		done
-		[ -f "$sdadir" -a -n "$(echo $name | grep -v '\.d')" -o -L "$sdadir" -a -n "$(echo $name | grep -v '\.d')" ] && break || sdadir=""
 	done
 	if [ -z "$sdadir" ];then
 		if [ -z "$del" ];then
@@ -817,9 +821,12 @@ sda_install_remove(){
 			}
 			[ "$1" = "AdGuardHome" ] && {
 				while [ -n "$(pidof $2)" ];do killpid $(pidof $2 | awk '{print $1}');done
-				[ "$adguardhomednsport" != 53 ] && firewalllog "add" "$1" "lan53rdr3" "tcpudp" "1" "lan" "53" "$adguardhomednsport"
 				firewalllog "add" "$1" "wan${newdefineport}rdr1" "tcp" "1" "wan" "$newdefineport" "$newdefineport"
 				echo -e "\t$sdadir/$2 -w $sdadir &> /dev/null &" >> $autostartfileinit
+				[ "$adguardhomednsport" != 53 ] && {
+					firewalllog "add" "$1" "lan53rdr3" "tcpudp" "1" "lan" "53" "$adguardhomednsport"
+					echo -e "\tip6tables -t nat -I PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports ${adguardhomednsport}\n\tip6tables -t nat -I PREROUTING -p udp --dport 53 -j REDIRECT --to-ports $adguardhomednsport" >> $autostartfileinit
+				}
 				[ -n "$tmpdir" -a -z "$skipdownload" ] && {
 					echo -e "tar -zxf /tmp/$1.tmp -C /tmp && mv -f /tmp/$1 /tmp/$1.dir && mv -f /tmp/$1.dir/$2 /tmp/XiaomiSimpleInstallBox/$2 && rm -rf /tmp/$1.dir" >> $downloadfileinit
 					if [ "$adguardhomednsport" = 53 ];then
@@ -872,6 +879,7 @@ sda_install_remove(){
 				while [ -n "$(iptables -S | grep ZeroTier | head -1)" ];do eval iptables $(iptables -S | grep ZeroTier | sed 's/-A/-D/' | head -1);done
 				while [ -n "$(iptables -t nat -S | grep ZeroTier | head -1)" ];do eval iptables -t nat $(iptables -t nat -S | grep ZeroTier | sed 's/-A/-D/' | head -1);done
 			}
+			[ "$1" = "AdGuardHome" ] && [ "$adguardhomednsport" != 53 ] && echo -e "\tip6tables -t nat -D PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports ${adguardhomednsport}\n\tip6tables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-ports $adguardhomednsport" >> $autostartfileinit
 			echo -e "}" >> $autostartfileinit && chmod 755 $autostartfileinit && log "新建自启动文件$autostartfileinit"
 			ln -sf $autostartfileinit $autostartfilerc && log "新建自启动链接文件$autostartfilerc并链接到$autostartfileinit" && chmod 777 $autostartfilerc && $autostartfileinit start &> /dev/null
 			[ -n "$tmpdir" -a -z "$skipdownload" ] && {
