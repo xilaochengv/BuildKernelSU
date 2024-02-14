@@ -1,4 +1,4 @@
-version=v1.0.6b
+version=v1.0.6c
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=false
 hardware_release=$(cat /etc/openwrt_release | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_arch=$(cat /etc/openwrt_release | grep ARCH | awk -F "'" '{print $2}')
@@ -449,9 +449,10 @@ sda_install_remove(){
 						break
 					}
 				done
-				[ -f "$sdadir" -a -n "$(echo $name | grep -v '\.d')" -o -L "$sdadir" -a -n "$(echo $name | grep -v '\.d')" ] && break || sdadir=""
 			}
+			[ -f "$sdadir" -a -n "$(echo $name | grep -v '\.d')" -o -L "$sdadir" -a -n "$(echo $name | grep -v '\.d')" ] && break || sdadir=""
 		done
+		[ -f "$sdadir" -a -n "$(echo $name | grep -v '\.d')" -o -L "$sdadir" -a -n "$(echo $name | grep -v '\.d')" ] && break || sdadir=""
 	done
 	if [ -z "$sdadir" ];then
 		if [ -z "$del" ];then
@@ -873,14 +874,14 @@ sda_install_remove(){
 				[ -n "$tmpdir" -a -z "$skipdownload" ] && echo -e "unzip -P $(cat /etc/zerotierpw 2> /dev/null) -oq /tmp/$1.tmp -d /tmp 2> /dev/null && mv -f /tmp/$2 /tmp/XiaomiSimpleInstallBox/$2" >> $downloadfileinit
 			}
 			echo -e "}\n\nstop() {\n\tservice_stop $sdadir/$2" >> $autostartfileinit
+			[ "$1" = "AdGuardHome" ] && [ "$adguardhomednsport" != 53 ] && echo -e "\tip6tables -t nat -D PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports ${adguardhomednsport}\n\tip6tables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-ports $adguardhomednsport" >> $autostartfileinit
 			[ "$1" = "zerotier" ] && {
 				echo -e "\tiptables -D FORWARD -o $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口出口\" -j ACCEPT 2> /dev/null\n\tiptables -D FORWARD -i $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口入口\" -j ACCEPT 2> /dev/null\n\tiptables -t nat -D POSTROUTING -o $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口出口钳制\" -j MASQUERADE 2> /dev/null" >> $autostartfileinit
 				while [ -n "$(pidof $2)" ];do killpid $(pidof $2 | awk '{print $1}');done
 				while [ -n "$(iptables -S | grep ZeroTier | head -1)" ];do eval iptables $(iptables -S | grep ZeroTier | sed 's/-A/-D/' | head -1);done
 				while [ -n "$(iptables -t nat -S | grep ZeroTier | head -1)" ];do eval iptables -t nat $(iptables -t nat -S | grep ZeroTier | sed 's/-A/-D/' | head -1);done
 			}
-			[ "$1" = "AdGuardHome" ] && [ "$adguardhomednsport" != 53 ] && echo -e "\tip6tables -t nat -D PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports ${adguardhomednsport}\n\tip6tables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-ports $adguardhomednsport" >> $autostartfileinit
-			echo -e "}" >> $autostartfileinit && chmod 755 $autostartfileinit && log "新建自启动文件$autostartfileinit"
+			echo "}" >> $autostartfileinit && chmod 755 $autostartfileinit && log "新建自启动文件$autostartfileinit"
 			ln -sf $autostartfileinit $autostartfilerc && log "新建自启动链接文件$autostartfilerc并链接到$autostartfileinit" && chmod 777 $autostartfilerc && $autostartfileinit start &> /dev/null
 			[ -n "$tmpdir" -a -z "$skipdownload" ] && {
 				echo -e "rm -f /tmp/$1.tmp\nchmod 755 /tmp/XiaomiSimpleInstallBox/$2\netc/init.d/$1 restart &> /dev/null\nrm -f /tmp/download$1file.sh\nEOF\n\tchmod 755 /tmp/download$1file.sh\n\t/tmp/download$1file.sh &\n}" >> $downloadfileinit && chmod 755 $downloadfileinit && log "新建自启动文件$downloadfileinit"
