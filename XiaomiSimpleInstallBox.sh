@@ -1,4 +1,4 @@
-version=v1.0.7
+version=v1.0.7a
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=false
 hardware_release=$(cat /etc/openwrt_release 2> /dev/null | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_arch=$(cat /etc/openwrt_release 2> /dev/null | grep ARCH | awk -F "'" '{print $2}')
@@ -1203,7 +1203,7 @@ main(){
 			echo -e "$PINK当前已选择设备：$SKYBLUE$devmac$GREEN$devname$RESET"
 			echo "---------------------------------------------------------"
 			echo -e "0.\t返回上一页" && domainblacklist_update
-			[ ! -f /etc/domainblacklist -o ! "$(sed -n 1p /etc/domainblacklist 2> /dev/null | grep reload)" ] && echo -e "reload(){\n\tiptables -D FORWARD -i br-lan -j DOMAIN_REJECT_RULE &> /dev/null\n\tiptables -F DOMAIN_REJECT_RULE &> /dev/null\n\tiptables -X DOMAIN_REJECT_RULE &> /dev/null\n\tiptables -N DOMAIN_REJECT_RULE\n\tiptables -I FORWARD -i br-lan -j DOMAIN_REJECT_RULE\n\tsed -n 15,\$\$p /etc/domainblacklist | while read LINE;do\n\t\tiptables -A DOMAIN_REJECT_RULE -m mac --mac-source \${LINE:1:18} -m string --string \"\${LINE:19:\$\$}\" --algo bm -j REJECT\n\tdone\n}\ndomain_rule_check(){\n\t[ ! \"\$(iptables -S FORWARD | grep -e -i | head -1 | grep DOMAIN)\" ] && reload\n}\n[ \"\$1\" = \"reload\" ] && reload || domain_rule_check" > /etc/domainblacklist && log "新建文件/etc/domainblacklist" && chmod 755 /etc/domainblacklist
+			[ ! -f /etc/domainblacklist -o ! "$(sed -n 1p /etc/domainblacklist 2> /dev/null | grep reload)" ] && echo -e "reload(){\n\tiptables -D FORWARD -i br-lan -j DOMAIN_REJECT_RULE &> /dev/null;ip6tables -D FORWARD -i br-lan -j DOMAIN_REJECT_RULE &> /dev/null\n\tiptables -F DOMAIN_REJECT_RULE &> /dev/null;ip6tables -F DOMAIN_REJECT_RULE &> /dev/null\n\tiptables -X DOMAIN_REJECT_RULE &> /dev/null;ip6tables -X DOMAIN_REJECT_RULE &> /dev/null\n\tiptables -N DOMAIN_REJECT_RULE;ip6tables -N DOMAIN_REJECT_RULE\n\tiptables -I FORWARD -i br-lan -j DOMAIN_REJECT_RULE;ip6tables -I FORWARD -i br-lan -j DOMAIN_REJECT_RULE\n\tsed -n 16,\$\$p /etc/domainblacklist | while read LINE;do\n\t\tiptables -A DOMAIN_REJECT_RULE -m mac --mac-source \${LINE:1:18} -m string --string \"\${LINE:19:\$\$}\" --algo bm -j REJECT\n\t\tip6tables -A DOMAIN_REJECT_RULE -m mac --mac-source \${LINE:1:18} -m string --string \"\${LINE:19:\$\$}\" --algo bm -j REJECT\n\tdone\n}\ndomain_rule_check(){\n\t[ ! \"\$(iptables -S FORWARD | grep -e -i | head -1 | grep DOMAIN)\" -o ! \"\$(ip6tables -S FORWARD | grep -e -i | head -1 | grep DOMAIN)\" ] && reload\n}\n[ \"\$1\" = \"reload\" ] && reload || domain_rule_check" > /etc/domainblacklist && log "新建文件/etc/domainblacklist" && chmod 755 /etc/domainblacklist
 			[ ! "$(grep domainblacklist /etc/crontabs/root)" ] && echo "*/1 * * * * /etc/domainblacklist" >> /etc/crontabs/root && /etc/init.d/cron restart &> /dev/null && log "添加定时任务domainblacklist到/etc/crontabs/root文件中"
 			while [ ! "$domain" ];do
 				echo -ne "\n"
@@ -1241,6 +1241,8 @@ echo -e "MIRRORS=\"$(echo $MIRRORS)\"\n[ -f $0 ] && {\n\tgithub_download(){\n\t\
 
 #修复v1.0.2版本时的设备网页黑名单重启后不会生效问题
 [ -f /etc/domainblacklist ] && [ ! "$(sed -n 12p /etc/domainblacklist 2> /dev/null | grep '(')" ] && sed -i "12c\\\t[ ! \"\$(iptables -S FORWARD | grep -e -i | head -1 | grep DOMAIN)\" ] && reload" /etc/domainblacklist && /etc/domainblacklist
+#修复设备网页黑名单对ipv6流量不生效问题
+[ -f /etc/domainblacklist ] && [ ! "$(sed -n 2p /etc/domainblacklist 2> /dev/null | grep ip6tables)" ] && sed -i -e '2s/.*/&;ip6tables -D FORWARD -i br-lan -j DOMAIN_REJECT_RULE \&> \/dev\/null/;3s/.*/&;ip6tables -F DOMAIN_REJECT_RULE \&> \/dev\/null/;4s/.*/&;ip6tables -X DOMAIN_REJECT_RULE \&> \/dev\/null/;5s/.*/&;ip6tables -N DOMAIN_REJECT_RULE/;6s/.*/&;ip6tables -I FORWARD -i br-lan -j DOMAIN_REJECT_RULE/;7s/15/16/;8a\\t\tip6tables -A DOMAIN_REJECT_RULE -m mac --mac-source \${LINE:1:18} -m string --string \"\${LINE:19:\$\$}\" --algo bm -j REJECT' -e '12c\\t[ ! "$(iptables -S FORWARD | grep -e -i | head -1 | grep DOMAIN)" -o ! "$(ip6tables -S FORWARD | grep -e -i | head -1 | grep DOMAIN)" ] && reload' /etc/domainblacklist && /etc/domainblacklist
 
 echo -e "\n$YELLOW=========================================================$RESET"
 echo -e "\n欢迎使用$YELLOW小米路由器$GREEN简易安装插件脚本 $PINK$version$RESET ，觉得好用希望能够$RED$BLINK打赏支持~！$RESET"
