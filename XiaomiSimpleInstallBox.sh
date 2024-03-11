@@ -1,4 +1,4 @@
-version=v1.0.7a
+version=v1.0.7b
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=false
 hardware_release=$(cat /etc/openwrt_release 2> /dev/null | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_arch=$(cat /etc/openwrt_release 2> /dev/null | grep ARCH | awk -F "'" '{print $2}')
@@ -521,9 +521,9 @@ sda_install_remove(){
 		[ "$1" = "vsftpd" ] && rm -f /etc/vsftpd.conf && opkg remove vsftpd &> /dev/null && [ -f /etc/services.backup ] && mv -f /etc/services.backup /etc/services && log "恢复/etc/services.backup文件并改名为services"
 		[ "$1" = "transmission" ] && rm -rf /etc/config/transmission /usr/share/transmission/ && opkg remove transmission-web transmission-daemon-openssl transmission-daemon-mbedtls libnatpmp libminiupnpc &> /dev/null
 		[ "$1" = "设备禁止访问网页黑名单" ] && {
-			iptables -D FORWARD -i br-lan -j DOMAIN_REJECT_RULE &> /dev/null
-			iptables -F DOMAIN_REJECT_RULE &> /dev/null
-			iptables -X DOMAIN_REJECT_RULE &> /dev/null
+			iptables -D FORWARD -i br-lan -j DOMAIN_REJECT_RULE &> /dev/null;ip6tables -D FORWARD -i br-lan -j DOMAIN_REJECT_RULE &> /dev/null
+			iptables -F DOMAIN_REJECT_RULE &> /dev/null;ip6tables -F DOMAIN_REJECT_RULE &> /dev/null
+			iptables -X DOMAIN_REJECT_RULE &> /dev/null;ip6tables -X DOMAIN_REJECT_RULE &> /dev/null
 			[ -f /etc/domainblacklist ] && rm -f /etc/domainblacklist && log "删除文件/etc/domainblacklist"
 			[ "$(grep domainblacklist /etc/crontabs/root 2> /dev/null)" ] && sed -i '/domainblacklist/d' /etc/crontabs/root && /etc/init.d/cron restart &> /dev/null && log "删除/etc/crontabs/root文件中的定时任务domainblacklist"
 		}
