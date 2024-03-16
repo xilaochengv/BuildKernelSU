@@ -1,10 +1,10 @@
-version=v1.0.7b
+version=v1.0.7c
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=false
 hardware_release=$(cat /etc/openwrt_release 2> /dev/null | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_arch=$(cat /etc/openwrt_release 2> /dev/null | grep ARCH | awk -F "'" '{print $2}')
 hostip=$(uci get network.lan.ipaddr 2> /dev/null)
 wanifname=$(uci get network.wan.ifname 2> /dev/null)
-[ "$(uci get /usr/share/xiaoqiang/xiaoqiang_version.version.HARDWARE 2> /dev/null)" = "RA70" ] && [ "$(uci get /usr/share/xiaoqiang/xiaoqiang_version.version.ROM 2> /dev/null)" != "1.0.140" ] && MiAX9000=true
+[ -d /usr/share/xiaoqiang -a "$(uname -m)" = "aarch64" ] && miAARCH64=true
 MIRRORS="
 https://gh.ddlc.top/
 https://hub.gitmirror.com/
@@ -320,7 +320,7 @@ sdadir_available_check(){
 	sizeneeded=$(echo $4 | grep -oE [0-9]{1,10})
 	[ "$(echo $4 | grep MB)" ] && sizeneeded=$(($(echo $4 | grep -oE [0-9]{1,10})*1024))
 	[ "$(echo $4 | grep GB)" ] && sizeneeded=$(($(echo $4 | grep -oE [0-9]{1,10})*1024*1024))
-	if [ ! "$(echo $1 | grep -oE 'aria2|vsftpd|transmission|homeassistant')" ];then
+	if [ ! "$(echo $1 | grep -oE 'aria2|vsftpd|transmission|docker|homeassistant')" ];then
 		[ "$sdadiravailable" -lt $sizeneeded ] && {
 			echo -e "\n所选目录 $BLUE${sdadir%/*} $RED空间不足 $(($sizeneeded/1024)) MB$RESET！无法直接下载使用！不过可以尝试使用 ${YELLOW}upx$RESET 压缩后使用" && sleep 2
 			tmpdiravailable=$(df | grep " /tmp$" | awk '{print $4}')
@@ -343,7 +343,7 @@ sdadir_available_check(){
 				echo -e "\n${YELLOW}upx$RESET 主程序可以在 ${SKYBLUE}https://github.com/upx/upx/releases/latest$RESET 下载"
 				echo -e "\n使用方法：下载完成后，先将 $YELLOW$2$RESET 文件放到 ${YELLOW}upx$RESET 主程序所在的同一个目录"
 				echo -e "\n然后在 ${YELLOW}upx$RESET 主程序所在的目录内打开 ${YELLOW}cmd 控制台$RESET并输入：${PINK}upx --best $2$RESET" && sleep 5 && upxneeded=1
-				[ -f "/tmp/$2" ] && {
+				[ -f /tmp/$2 ] && {
 					echo -e "\n发现已下载好的 $YELLOW$2$RESET 主程序文件，是否直接尝试对其进行压缩？" && upxretry=""
 					echo -e "\n$PINK请输入你的选项：$RESET"
 					echo "---------------------------------------------------------"
@@ -360,9 +360,13 @@ sdadir_available_check(){
 			}
 		}
 	else
-		[ "$sdadiravailable" -lt $sizeneeded ] && echo -e "\n所选目录 $BLUE${sdadir%/*} $RED空间不足 $(($sizeneeded/1024)) MB！无法安装！$RESET请选择其它安装路径" && sleep 2 && num="" && return 1
-		[ "$1" = "homeassistant" ] && [ "$(df -T | grep ${sdadir%/*} | awk '{print $2}')" != "ext4" ] && echo -e "\n${YELLOW}Home-Assistant $RED仅支持安装在$YELLOW ext4 $RED格式的分区中！所选目录 $BLUE${sdadir%/*} $RED分区格式为 $YELLOW$(df -T | grep ${sdadir%/*} | awk '{print $2}') $RED，无法安装！请选择其它安装路径$RESET" && sleep 2 && num=""
+		[ "$sdadiravailable" -lt $sizeneeded ] && echo -e "\n所选目录 $BLUE${sdadir%/*} $RED空间不足 $(($sizeneeded/1024)) MB！无法安装！$RESET" && sleep 2 && num="" && return 1
+		[ "$1" = "docker" ] && {
+			[ ! "$miAARCH64" ] && echo -e "\n$RED本脚本 ${YELLOW}Docker $RED仅支持在$YELLOW aarch64 $RED架构的小米路由器中安装！本机处理器架构为 $YELLOW$(uname -m) $RED，无法安装！请自行查找其它安装方式！$RESET" && sleep 2 && main
+			[ "$(df -T | grep ${sdadir%/*}$ | awk '{print $2}')" != "ext4" ] && echo -e "\n${YELLOW}Docker $RED仅支持安装在$YELLOW ext4 $RED格式的分区中！所选目录 $BLUE${sdadir%/*} $RED分区格式为 $YELLOW$(df -T | grep ${sdadir%/*}$ | awk '{print $2}') $RED，无法安装！请选择其它安装路径$RESET" && sleep 2 && num=""
+		}
 	fi
+	return 0
 }
 github_download(){
 	for MIRROR in $MIRRORS;do
@@ -384,28 +388,28 @@ github_download(){
 firewalllog(){
 	[ "$1" = "add" ] && {
 		if [ "$5" = "1" ];then
-			uci set firewall.$3=redirect
-			uci set firewall.$3.name=$2-$3
-			uci set firewall.$3.proto=$4
-			uci set firewall.$3.ftype=$5
-			uci set firewall.$3.dest_ip=$hostip
-			uci set firewall.$3.src=$6
-			uci set firewall.$3.dest=lan
-			uci set firewall.$3.target=DNAT
-			uci set firewall.$3.src_dport=$7
-			uci set firewall.$3.dest_port=$8
-			uci commit && log "更新$2-$3端口转发规则到/etc/config/firewall文件中"
+			uci -q set firewall.$3=redirect
+			uci -q set firewall.$3.name=$2-$3
+			uci -q set firewall.$3.proto=$4
+			uci -q set firewall.$3.ftype=$5
+			uci -q set firewall.$3.dest_ip=$hostip
+			uci -q set firewall.$3.src=$6
+			uci -q set firewall.$3.dest=lan
+			uci -q set firewall.$3.target=DNAT
+			uci -q set firewall.$3.src_dport=$7
+			uci -q set firewall.$3.dest_port=$8
+			uci -q commit && log "更新$2-$3端口转发规则到/etc/config/firewall文件中"
 		else
-			uci set firewall.$3=redirect
-			uci set firewall.$3.name=$2-$3
-			uci set firewall.$3.proto=$4
-			uci set firewall.$3.ftype=$5
-			uci set firewall.$3.dest_ip=$hostip
-			uci set firewall.$3.src=$6
-			uci set firewall.$3.dest=lan
-			uci set firewall.$3.target=DNAT
-			uci set firewall.$3.src_dport=$7
-			uci commit && log "更新$2-$3端口转发规则到/etc/config/firewall文件中"
+			uci -q set firewall.$3=redirect
+			uci -q set firewall.$3.name=$2-$3
+			uci -q set firewall.$3.proto=$4
+			uci -q set firewall.$3.ftype=$5
+			uci -q set firewall.$3.dest_ip=$hostip
+			uci -q set firewall.$3.src=$6
+			uci -q set firewall.$3.dest=lan
+			uci -q set firewall.$3.target=DNAT
+			uci -q set firewall.$3.src_dport=$7
+			uci -q commit && log "更新$2-$3端口转发规则到/etc/config/firewall文件中"
 		fi
 		echo -e "\n$YELLOW$2$RESET 端口转发规则 $PINK$2-$3$RESET $GREEN已更新$RESET ······" && sleep 1
 	}
@@ -413,14 +417,14 @@ firewalllog(){
 		ruleexist=""
 		while [ "$(uci show firewall | grep $2 | awk -F '.' '{print $2}' | head -1)" ];do
 			firewallrule=$(uci show firewall | grep $2 | awk -F '.' '{print $2}' | head -1)
-			uci del firewall.$firewallrule && uci commit && log "删除/etc/config/firewall文件中的端口转发规则$2-$firewallrule" && ruleexist=1
+			uci -q del firewall.$firewallrule && uci -q commit && log "删除/etc/config/firewall文件中的端口转发规则$2-$firewallrule" && ruleexist=1
 			echo -e "\n$YELLOW$2$RESET 端口转发规则 $PINK$2-$firewallrule$RESET $RED已删除$RESET ······" && sleep 1
 		done
 	}
 	return 0
 }
 sda_install_remove(){
-	sdalist=$(df 2> /dev/null | sed -n '1!p' | grep -vE "rom|tmp|ini|overlay" | awk '{print $6}')
+	sdalist=$(df | sed -n '1!p' | grep -vE "rom|tmp|ini|overlay|sys|lib|docker_disk" | awk '{print $6}')
 	autostartfileinit=/etc/init.d/$1 && autostartfilerc=/etc/rc.d/S95$1 && downloadfileinit=/etc/init.d/Download$1 && downloadfilerc=/etc/rc.d/S95Download$1 && tmpdir="" && old_tag="" && upxretry=0 && skipdownload="" && newuser="" && DNSINFO="" && adguardhomednsport=53
 	[ "$3" = "del" ] && del="true" || del=""
 	[ ! "$del" ] && {
@@ -429,35 +433,21 @@ sda_install_remove(){
 			echo -e "\n$PINK\t[[  这里以下是 ${YELLOW}$1 $PINK的安装过程  ]]$RESET"
 			echo -e "\n$YELLOW=========================================================$RESET"
 		}
-		[ "$1" = "aria2" ] && opkg_test_install "ariang" && opkg_test_install "aria2"
 		[ "$1" = "vsftpd" ] && opkg_test_install "vsftpd"
-		[ "$1" = "transmission" ] && {
-			opkg_test_install "transmission-web"
-			[ "$(find /usr -name openssl)" ] && opkg_test_install "transmission-daemon-openssl" || opkg_test_install "transmission-daemon-mbedtls"
-		}
 	}
 	for tmplist in $sdalist;do
-		if [ "$1" = "homeassistant" ];then
-			sdadir=$(find $tmplist -maxdepth 1 -type d -name $2) && [ -d "$sdadir" ] && sdadir=$sdadir/$2 && break
-		else
-			for dirname in $(ls $tmplist);do
-				[ -d "$tmplist/$dirname" -a "$dirname" != "homeassistant" ] && {
-					sdadir=$(find $tmplist/$dirname -name $2)
-					for name in $sdadir;do
-						[ -f "$name" -a "$(echo $name | grep -v '\.d')" -o -L "$name" -a "$(echo $name | grep -v '\.d')" ] && {
-							sdadir=$name
-							[ -L "$sdadir" -a "$(echo $name | grep -v '\.d')" ] && {
-								tmpdir="/tmp/XiaomiSimpleInstallBox"
-								[ "$1" = "zerotier" ] && skipdownload=1
-							}
-							break
-						}
-					done
+		sdadir=$(find $tmplist -maxdepth 2 -name $2)
+		for name in $sdadir;do
+			[ -f "$name" -a "$(echo $name | grep -v '\.d')" -o -L "$name" -a "$(echo $name | grep -v '\.d')" ] && {
+				sdadir=$name
+				[ -L "$sdadir" -a "$(echo $name | grep -v '\.d')" ] && {
+					tmpdir="/tmp/XiaomiSimpleInstallBox"
+					[ "$1" = "zerotier" ] && skipdownload=1
 				}
-				[ -f "$sdadir" -a "$(echo $name | grep -v '\.d')" -o -L "$sdadir" -a "$(echo $name | grep -v '\.d')" ] && break || sdadir=""
-			done
-			[ -f "$sdadir" -a "$(echo $name | grep -v '\.d')" -o -L "$sdadir" -a "$(echo $name | grep -v '\.d')" ] && break || sdadir=""
-		fi
+				break
+			}
+		done
+		[ -f "$sdadir" -a "$(echo $name | grep -v '\.d')" -o -L "$sdadir" -a "$(echo $name | grep -v '\.d')" ] && break || sdadir=""
 	done
 	if [ ! "$sdadir" ];then
 		if [ ! "$del" ];then
@@ -465,6 +455,7 @@ sda_install_remove(){
 				opkg_test_install "zerotier"
 				[ "$?" != 0 ] && echo -e "\n${RED}opkg 下载失败或本机无法直接运行 $YELLOW$1$RESET ！需要下载静态二进制文件" && sleep 2
 			}
+			[ "$1" = "homeassistant" ] && echo -e "\n请先安装 ${YELLOW}Docker$RESET ！" && sleep 2 && main
 			echo -e "\n$PINK请选择下载保存路径：$RESET" && listcount="" && num=""
 			echo "---------------------------------------------------------"
 			echo -e "${GREEN}ID\t$SKYBLUE剩余可用空间\t\t$BLUE可选路径$RESET"
@@ -496,25 +487,42 @@ sda_install_remove(){
 		fi
 	else
 		sdadir=${sdadir%/*}
-		[ ! "$del" ] && [ "$1" != "homeassistant" ] && old_tag=$(eval $sdadir/$2 $3 2> /dev/null | sed 's/.*v/v/;s/^[^v]/v&/');[ "$7" ] && $7
-		[ "$old_tag" ] && echo -e "\n找到 $YELLOW$1 $PINK$old_tag$RESET 的安装路径：$BLUE$sdadir$RESET" || echo -e "\n找到 $YELLOW$1$RESET 的安装路径：$BLUE$sdadir$RESET"
-		sleep 2
-		[ ! "$del" -a "$1" = "homeassistant" ] && {
-			echo -e "\n检查 $YELLOW$1$RESET 文件完整性 ······" && sleep 2
-			if [ ! -f "$autostartfileinit" -o ! -f "$sdadir/.HA_VERSION" -o ! -f "$sdadir/swapfile" -o ! "$(swapon -s 2> /dev/null)" ];then
-				echo -e "\n$YELLOW$1$RESET文件有缺失！请使用 ${YELLOW}del10$RESET 功能卸载后重新安装！" && sleep 2 && main
-			else
-				echo -e "\n$YELLOW$1$RESET文件完整，无需重新下载！" && sleep 2 && main
-			fi
+		[ ! "$del" ] && {
+			old_tag=$(eval $sdadir/$2 $3 2> /dev/null | sed 's/.*v/v/;s/^[^v]/v&/');[ "$7" ] && $7
+			[ "$1" = "homeassistant" ] && {
+				echo -e "\n找到 $YELLOW$2$RESET 的安装路径：$BLUE$sdadir$RESET" && sleep 2
+				[ ! "$(ps | grep docker | grep -vE 'grep|docker_disk')" ] && echo -e "\n请先启动 ${YELLOW}Docker$RESET ！" && sleep 2 && main
+				if [ ! -d $sdadir/homeassistant/custom_components/hacs ];then
+					sdadir_available_check "$1" "$2" "$3" "$4";[ "$?" = 1 ] && main
+					echo -e "\n$YELLOW获取 Home-Assistants 镜像 ······$RESET" && docker pull homeassistant/aarch64-homeassistant
+					echo -e "\n$YELLOW下载 HACS 文件 ······$RESET" && github_download "hacs.zip" "https://github.com/hacs-china/integration/releases/latest/download/hacs.zip"
+					[ "$?" != 0 ] && echo -e "$RED下载 HACS 文件失败！$RESET" && sleep 2 && main
+					echo -e "\n$YELLOW解压 HACS 文件 ······$RESET" && mkdir -p $sdadir/homeassistant/custom_components/hacs && unzip -oq /tmp/hacs.zip -d $sdadir/homeassistant/custom_components/hacs && rm -f /tmp/hacs.zip
+					echo -e "\n$YELLOW启动 Home-Assistants ······$RESET" && docker run -d --name Home-Assistants --restart=unless-stopped --privileged --network=host -e TZ=Asia/Shanghai -v $sdadir/homeassistant:/config homeassistant/aarch64-homeassistant &> /dev/null
+					while [ ! "$(netstat -lnWp | grep :1900)" ];do sleep 1;done
+					echo -e "\n${YELLOW}Home-Assistants $GREEN安装成功$RESET！请登陆网页 $SKYBLUE$hostip:8123 $RESET进行管理" && main
+				else
+					docker run -d --name Home-Assistants --restart=unless-stopped --privileged --network=host -e TZ=Asia/Shanghai -v $sdadir/homeassistant:/config homeassistant/aarch64-homeassistant &> /dev/null
+					docker start Home-Assistants &> /dev/null
+					while [ ! "$(netstat -lnWp | grep :1900)" ];do sleep 1;done
+					echo -e "\n${YELLOW}Home-Assistants $GREEN启动成功$RESET！请登陆网页 $SKYBLUE$hostip:8123 $RESET进行管理" && sleep 2 && main
+				fi
+			}
 		}
+		if [ "$1" != "homeassistant" ];then
+			[ "$old_tag" ] && echo -e "\n找到 $YELLOW$1 $PINK$old_tag$RESET 的安装路径：$BLUE$sdadir$RESET" || echo -e "\n找到 $YELLOW$1$RESET 的安装路径：$BLUE$sdadir$RESET"
+			sleep 2
+		else
+			echo -e "\n找到 $YELLOW$2$RESET 的安装路径：$BLUE$sdadir$RESET" && sleep 2
+		fi
 	fi
 	[ "$del" ] && {
-		[ "$1" = "homeassistant" ] && echo -e "\n$YELLOW删除文件较多、卸载时间视外接硬盘性能而定，请耐心等候！$RESET"
-		$autostartfileinit stop &> /dev/null
-		[ -f "$autostartfileinit" ] && rm -f $autostartfileinit && log "删除自启动文件$autostartfileinit"
-		[ -L "$autostartfilerc" ] && rm -f $autostartfilerc && log "删除自启动链接文件$autostartfilerc"
-		[ -f "$downloadfileinit" ] && rm -f $downloadfileinit && log "删除自启动文件$downloadfileinit"
-		[ -L "$downloadfilerc" ] && rm -f $downloadfilerc && log "删除自启动链接文件$downloadfilerc"
+		[ "$1" = "docker" -o "$1" = "homeassistant" ] && echo -e "\n$YELLOW删除文件较多、卸载时间视外接硬盘性能而定，请耐心等候！$RESET"
+		$autostartfileinit stop 2> /dev/null
+		[ -f $autostartfileinit ] && rm -f $autostartfileinit && log "删除自启动文件$autostartfileinit"
+		[ -L $autostartfilerc ] && rm -f $autostartfilerc && log "删除自启动链接文件$autostartfilerc"
+		[ -f $downloadfileinit ] && rm -f $downloadfileinit && log "删除自启动文件$downloadfileinit"
+		[ -L $downloadfilerc ] && rm -f $downloadfilerc && log "删除自启动链接文件$downloadfilerc"
 		firewalllog "del" "$1" && [ "$ruleexist" ] && echo -e "\n$YELLOW$1$RESET 端口转发规则 $RED已全部删除$RESET，即将重启防火墙 ······" && sleep 2 && /etc/init.d/firewall restart &> /dev/null
 		[ "$1" = "AdGuardHome" ] && [ -f /etc/config/dhcp.backup ] && mv -f /etc/config/dhcp.backup /etc/config/dhcp && /etc/init.d/dnsmasq restart &> /dev/null && log "恢复/etc/config/dhcp.backup文件并改名为dhcp"
 		[ "$1" = "aria2" ] && rm -rf /www/ariang && opkg remove ariang aria2 &> /dev/null
@@ -529,9 +537,26 @@ sda_install_remove(){
 		}
 		[ "$1" = "wakeonlan" ] && rm -rf /usr/share/perl /usr/lib/perl5/ && opkg remove wakeonlan perlbase-net perlbase-time perlbase-dynaloader perlbase-filehandle perlbase-class perlbase-getopt perlbase-io perlbase-socket perlbase-selectsaver perlbase-symbol perlbase-scalar perlbase-posix perlbase-tie perlbase-list perlbase-fcntl perlbase-xsloader perlbase-errno perlbase-bytes perlbase-base perlbase-essential perlbase-config perl &> /dev/null && sed -i '/网络唤醒/d' /etc/crontabs/root && /etc/init.d/cron restart &> /dev/null
 		[ "$1" = "zerotier" ] && rm -f /etc/config/zerotier && opkg remove zerotier &> /dev/null
-		[ "$1" = "homeassistant" ] && rm -rf /lib/libblkid-tiny.so /lib/libubox.so.20230523 /lib/libubus.so.20230605 /lib/libblobmsg_json.so.20230523 /sbin/block /usr/lib/libjson-c.so.5 /usr/lib/libjson-c.so.5.2.0 /lib/upgrade/keep.d/block-mount  /usr/bin/containerd /usr/bin//usr/bin/containerd-shim /usr/bin/containerd-shim-runc-v2 /usr/bin/ctr /usr/bin/docker /usr/bin/docker-init /usr/bin/docker-proxy /usr/bin/dockerd /usr/bin/runc /usr/bin/swapoff /usr/bin/swapon /opt/containerd/ /run/blkid/ /run/containerd/ /run/docker/
+		[ "$1" = "docker" ] && {
+			rm -rf /lib/libblkid-tiny.so /lib/libubox.so.20230523 /lib/libubus.so.20230605 /lib/libblobmsg_json.so.20230523 /sbin/block /usr/lib/libjson-c.so.5 /usr/lib/libjson-c.so.5.2.0 /lib/upgrade/keep.d/block-mount  /usr/bin/containerd /usr/bin//usr/bin/containerd-shim /usr/bin/containerd-shim-runc-v2 /usr/bin/ctr /usr/bin/docker /usr/bin/docker-init /usr/bin/docker-proxy /usr/bin/dockerd /usr/bin/runc /usr/bin/swapoff /usr/bin/swapon /opt/containerd/ /run/blkid/ /run/containerd/ /run/docker/
+			[ -f /etc/config/mi_docker.backup ] && mv -f /etc/config/mi_docker.backup /etc/config/mi_docker && log "恢复/etc/config/mi_docker.backup文件并改名为mi_docker"
+			[ -f /etc/init.d/mi_docker.backup ] && mv -f /etc/init.d/mi_docker.backup /etc/init.d/mi_docker && log "恢复/etc/init.d/mi_docker.backup文件并改名为mi_docker"
+			[ -f /etc/init.d/cgroup_init.backup ] && mv -f /etc/init.d/cgroup_init.backup /etc/init.d/cgroup_init && log "恢复/etc/init.d/cgroup_init.backup文件并改名为cgroup_init" && /etc/init.d/cgroup_init start
+		}
+		[ "$1" = "homeassistant" ] && {
+			[ ! "$(ps | grep docker | grep -vE 'grep|docker_disk')" ] && echo -e "\n请先启动 ${YELLOW}Docker$RESET ！" && sleep 2 && main
+			docker stop Home-Assistants &> /dev/null
+			docker rm Home-Assistants &> /dev/null
+			docker rmi homeassistant/aarch64-homeassistant &> /dev/null
+			sdadir=$sdadir/homeassistant
+		}
 		[ "$sdadir" ] && rm -rf $sdadir && log "删除文件夹$sdadir"
 		echo -e "\n$YELLOW$1 $RED已一键删除！$RESET" && sleep 1 && main
+	}
+	[ "$1" = "aria2" ] && opkg_test_install "ariang" && opkg_test_install "aria2"
+	[ "$1" = "transmission" ] && {
+		opkg_test_install "transmission-web"
+		[ "$(find /usr -name openssl)" ] && opkg_test_install "transmission-daemon-openssl" || opkg_test_install "transmission-daemon-mbedtls"
 	}
 	if [ ! "$(echo $1 | grep -oE 'aria2|transmission')" ];then
 		[ "$1" = "zerotier" ] && [ -L "$sdadir/$2" ] && [ "$(file $sdadir/$2 | awk '{print $5}' | grep -oE '^/tmp/|^/var/')" ] && [ ! "$(cat $sdadir/networks.d/$(ls $sdadir/networks.d/ 2> /dev/null | grep -v local) 2> /dev/null)" -o ! -f /etc/init.d/Donwnload$1 ] && {
@@ -552,6 +577,8 @@ sda_install_remove(){
 								tag_name=$(curl --connect-timeout 3 -sk "$tag_url" | grep tag_name | cut -f4 -d '"')
 								[ "$?" = 0 ] && let adtagcount++
 							done
+						elif [ "$1" = "docker" ];then
+							tag_name=v$(curl -sk https://download.docker.com/linux/static/stable/aarch64/ | grep docker-[0-9] | tail -1 | awk -F \> '{print $1}' | grep -oE '[0-9].*[0-9]')
 						else
 							tag_name=$(curl --connect-timeout 3 -sk "$tag_url" | grep tag_name | cut -f4 -d '"')
 						fi
@@ -579,149 +606,144 @@ sda_install_remove(){
 								read -p "请输入对应选项的数字 > " downloadnum
 								[ "$(echo $downloadnum | sed 's/[0-9]//g')" -o ! "$downloadnum" ] && downloadnum="" && continue
 								[ "$downloadnum" -gt 1 ] && downloadnum="" && continue
-								[ "$downloadnum" -eq 0 ] && skipdownload=1
+								[ "$downloadnum" -eq 0 ] && skipdownload=1 && [ "$1" = "docker" ] && /etc/init.d/$1 start 2> /dev/null && main
 							done
 						}
 					}
 					[ ! "$skipdownload" ] && {
-						echo -e "\n$PINK请选择型号进行下载：$RESET" && num=""
-						echo "---------------------------------------------------------"
-						echo -e "1. $GREEN自动检测系统型号$RESET"
-						echo "2. aarch64"
-						[ "$1" = zerotier ] && echo "3. arm-eabi" || echo "3. arm"
-						[ "$1" = zerotier ] && echo "4. arm-eabihf" || echo "4. x86_64"
-						echo "5. mips"
-						echo "6. mipsel"
-						echo "7. mips64"
-						echo "8. mips64el"
-						echo "---------------------------------------------------------"
-						echo "0. 返回上一页"
-						echo -e "\n可以在 $SKYBLUE$urls$RESET 中查找并复制下载地址"
-						while [ ! "$num" ];do
-							echo -ne "\n"
-							read -p "请输入对应型号的数字或直接输入以 http 或 ftp 开头的下载地址 > " num
-								case "$num" in
-									1)
-										hardware_type=$(uname -m)
-										[ "$hardware_type" = "aarch64" ] && hardware_type=arm64;;
-									2)	hardware_type=arm64;;
-									3)	hardware_type=arm;;
-									4)	hardware_type=amd64;;
-									5)	hardware_type=mips;;
-									6)	hardware_type=mipsle;;
-									7)	hardware_type=mips64;;
-									8)	hardware_type=mips64le;;
-									0)	sda_install_remove "$1" "$2" "$3" "$4" "$5" "$6" "$7" "return"
-								esac
-							[ "$(echo $num | sed 's/[0-9]//g')" -a "${num:0:4}" != "http" -a "${num:0:3}" != "ftp" -o ! "$num" ] && num="" && continue
-							[ "${num:0:4}" != "http" -a "${num:0:3}" != "ftp" ] && [ "$num" -lt 1 -o "$num" -gt 8 ] && num="" && continue
-							[ "$1" = "qBittorrent" ] && {
-								[ "$hardware_type" = "arm64" ] && hardware_type=aarch64
-								[ "$hardware_type" = "mipsle" ] && hardware_type=mipsel
-								[ "$hardware_type" = "mips64le" ] && hardware_type=mips64el
-								[ "$hardware_type" = "amd64" ] && hardware_type=x86_64
-							}
-							[ "$1" = "AdGuardHome" ] && [ "$hardware_type" = "arm" ] && hardware_type=armv7
-							[ "$1" = "zerotier" ] && {
-								[ "$hardware_type" = "arm64" ] && hardware_type=aarch64
-								[ "$hardware_type" = "mipsle" ] && hardware_type=mipsel
-								[ "$hardware_type" = "mips64le" ] && hardware_type=mips64el
-							}
-						done
-						[ "$1" = "qBittorrent" -o "$1" = "zerotier" ] && opkg_test_install "unzip"
-						echo -e "\n下载 ${YELLOW}$1 $(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')$RESET ······" && retry_count=5 && eabi="" && softfloat="" && url=""
-						while [ ! -f /tmp/$1.tmp -a $retry_count != 0 ];do
-							[ "$hardware_type" = "arm" ] && eabi="eabi"
-							[ "$1" = "zerotier" ] && [ "$hardware_type" = "amd64" ] && hardware_type=arm && eabi="eabihf"
-							[ "${hardware_type:0:4}" = "mips" ] && softfloat="_softfloat"
-							[ "$1" = "qBittorrent" ] && url="https://github.com/c0re100/qBittorrent-Enhanced-Edition/releases/download/$tag_name/qbittorrent-enhanced-nox_$hardware_type-linux-musl${eabi}_static.zip"
-							[ "$1" = "Alist" ] && url="https://github.com/$5/$6/releases/download/$tag_name/alist-linux-musl$eabi-$hardware_type.tar.gz"
-							[ "$1" = "AdGuardHome" ] && url="https://github.com/$5/$6/releases/download/$tag_name/AdGuardHome_linux_$hardware_type$softfloat.tar.gz"
-							[ "$1" = "zerotier" ] && url="https://github.com/$5/$6/releases/download/$tag_name/zerotier-one-$hardware_type-linux-musl$eabi.zip"
-							if [ "${num:0:4}" = "http" -o "${num:0:3}" = "ftp" ];then
-								url="$num" && echo "" && curl --connect-timeout 3 -#Lko /tmp/$1.tmp "$url"
-							else
-								github_download "$1.tmp" "$url"
-							fi
-							if [ "$?" != 0 ];then
-								rm -f /tmp/$1.tmp && let retry_count--
-								[ $retry_count != 0 ] && echo -e "\n$RED下载失败！$RESET即将尝试重连······（剩余重试次数：$PINK$retry_count$RESET）" && sleep 1
-							else
-								[ "$(wc -c < /tmp/$1.tmp)" -lt 1024 ] && rm -f /tmp/$1.tmp && echo -e "\n$RED下载失败！$RESET没有找到适用于当前系统的文件包，请手动选择型号进行重试！" && sleep 1 && main
-							fi
-						done
-						[ ! -f /tmp/$1.tmp ] && echo -e "\n$RED下载失败！$RESET如果没有代理的话建议多尝试几次！" && sleep 1 && main
-						echo -e "\n$GREEN下载成功！$RESET即将解压安装并启动" && rm -f /tmp/$2 && sleep 2
-						case "$1" in
-							qBittorrent)	unzip -oq /tmp/$1.tmp -d /tmp;;
-							Alist)	tar -zxf /tmp/$1.tmp -C /tmp;;
-							AdGuardHome)	tar -zxf /tmp/$1.tmp -C /tmp && mv -f /tmp/$1 /tmp/$1.dir && mv -f /tmp/$1.dir/$1 /tmp/$1 && rm -rf /tmp/$1.dir;;
-							zerotier)
-								zerotierpw="$(cat /etc/zerotierpw 2> /dev/null)"
-								[ ! -f /tmp/zerotier-one -a ! "$zerotierpw" ] && {
-									echo -e "\n编译静态二进制文件是每个人都可以自己免费完成的，需要消耗的是学习如何编译的这个过程中所花费的时间"
-									echo "“小米路由器简易安装插件脚本” 从发布至今（2024-02-08）仅仅收到一位名为 “**吉” 的网友打赏：10块钱（十分感谢这位网友）。"
-									echo "投入的时间和回报实在是完全不成正比，如果你对此功能十分需要，并且愿意使用金钱买时间的话"
-									echo -e "可以添加本人微信并打赏获取解压密码，或者自行编译静态二进制文件并将其重命名为$YELLOW zerotier-one$RESET 并放到 /tmp 目录下，然后重新执行本脚本"
-									echo -e "为了挣点鸡腿钱~！望理解！十分感谢！！"
-									echo -e "\n获取密码请使用微信扫码：\n"
-									echo H4sIAAAAAAAAA71UyxXDIAy7dwqNqgMHJuiAmaRtArIgQHJp3nPyzMeWbRlv77w9KK8nwXo8bO/kgn2bx0n2je8pUfbHVhP/GYD8scpvTTmu94/lyWrm2WKo/h1mDw1CwNRqzEQaSVYlIlZ2JwvbBQeQF5WXp39qiGAPvs7Ga+wAOvVl7JcKAhWAredTNnQqCkqTnRgKA5dk8czzgWteIBYswPzs4Sf4tVUW1UDp586UplBMhGYvadW/2YNiy4mKHf07LM51Lqn926sVR8d7S55yucPjJS57t5sEfR9HsoQh3mKinQWFRP9inngkhDrw7vRAdLj8d1mpiy6qPZsbM31I1mBuDPH+Lo/jfQAKj+dbggcAAA== | base64 -d | gzip -d
+						if [ "$1" != "docker" ]; then
+							echo -e "\n$PINK请选择型号进行下载：$RESET" && num=""
+							echo "---------------------------------------------------------"
+							echo -e "1. $GREEN自动检测系统型号$RESET"
+							echo "2. aarch64"
+							[ "$1" = zerotier ] && echo "3. arm-eabi" || echo "3. arm"
+							[ "$1" = zerotier ] && echo "4. arm-eabihf" || echo "4. x86_64"
+							echo "5. mips"
+							echo "6. mipsel"
+							echo "7. mips64"
+							echo "8. mips64el"
+							echo "---------------------------------------------------------"
+							echo "0. 返回上一页"
+							echo -e "\n可以在 $SKYBLUE$urls$RESET 中查找并复制下载地址"
+							while [ ! "$num" ];do
+								echo -ne "\n"
+								read -p "请输入对应型号的数字或直接输入以 http 或 ftp 开头的下载地址 > " num
+									case "$num" in
+										1)
+											hardware_type=$(uname -m)
+											[ "$hardware_type" = "aarch64" ] && hardware_type=arm64;;
+										2)	hardware_type=arm64;;
+										3)	hardware_type=arm;;
+										4)	hardware_type=amd64;;
+										5)	hardware_type=mips;;
+										6)	hardware_type=mipsle;;
+										7)	hardware_type=mips64;;
+										8)	hardware_type=mips64le;;
+										0)	sda_install_remove "$1" "$2" "$3" "$4" "$5" "$6" "$7" "return"
+									esac
+								[ "$(echo $num | sed 's/[0-9]//g')" -a "${num:0:4}" != "http" -a "${num:0:3}" != "ftp" -o ! "$num" ] && num="" && continue
+								[ "${num:0:4}" != "http" -a "${num:0:3}" != "ftp" ] && [ "$num" -lt 1 -o "$num" -gt 8 ] && num="" && continue
+								[ "$1" = "qBittorrent" ] && {
+									[ "$hardware_type" = "arm64" ] && hardware_type=aarch64
+									[ "$hardware_type" = "mipsle" ] && hardware_type=mipsel
+									[ "$hardware_type" = "mips64le" ] && hardware_type=mips64el
+									[ "$hardware_type" = "amd64" ] && hardware_type=x86_64
 								}
-								unzip -P "$zerotierpw" -oq /tmp/$1.tmp -d /tmp 2> /dev/null
-								while [ ! -f /tmp/zerotier-one ];do
-									echo -ne "\n" && rm -f /etc/zerotierpw
-									read -p "请输入正确的解压密码（输入 0 返回主页面） > " zerotierpw
-									[ "$zerotierpw" = 0 ] && rm -f /tmp/$1.tmp && main
-									unzip -P "$zerotierpw" -oq /tmp/$1.tmp -d /tmp 2> /dev/null
+								[ "$1" = "AdGuardHome" ] && [ "$hardware_type" = "arm" ] && hardware_type=armv7
+								[ "$1" = "zerotier" ] && {
+									[ "$hardware_type" = "arm64" ] && hardware_type=aarch64
+									[ "$hardware_type" = "mipsle" ] && hardware_type=mipsel
+									[ "$hardware_type" = "mips64le" ] && hardware_type=mips64el
+								}
+							done
+							[ "$1" = "qBittorrent" -o "$1" = "zerotier" ] && opkg_test_install "unzip"
+							echo -e "\n下载 ${YELLOW}$1 $(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')$RESET ······" && retry_count=5 && eabi="" && softfloat="" && url=""
+							while [ ! -f /tmp/$1.tmp -a $retry_count != 0 ];do
+								[ "$hardware_type" = "arm" ] && eabi="eabi"
+								[ "$1" = "zerotier" ] && [ "$hardware_type" = "amd64" ] && hardware_type=arm && eabi="eabihf"
+								[ "${hardware_type:0:4}" = "mips" ] && softfloat="_softfloat"
+								[ "$1" = "qBittorrent" ] && url="https://github.com/c0re100/qBittorrent-Enhanced-Edition/releases/download/$tag_name/qbittorrent-enhanced-nox_$hardware_type-linux-musl${eabi}_static.zip"
+								[ "$1" = "Alist" ] && url="https://github.com/$5/$6/releases/download/$tag_name/alist-linux-musl$eabi-$hardware_type.tar.gz"
+								[ "$1" = "AdGuardHome" ] && url="https://github.com/$5/$6/releases/download/$tag_name/AdGuardHome_linux_$hardware_type$softfloat.tar.gz"
+								[ "$1" = "zerotier" ] && url="https://github.com/$5/$6/releases/download/$tag_name/zerotier-one-$hardware_type-linux-musl$eabi.zip"
+								if [ "${num:0:4}" = "http" -o "${num:0:3}" = "ftp" ];then
+									url="$num" && echo "" && curl --connect-timeout 3 -#Lko /tmp/$1.tmp "$url"
+								else
+									github_download "$1.tmp" "$url"
+								fi
+								if [ "$?" != 0 ];then
+									rm -f /tmp/$1.tmp && let retry_count--
+									[ $retry_count != 0 ] && echo -e "\n$RED下载失败！$RESET即将尝试重连······（剩余重试次数：$PINK$retry_count$RESET）" && sleep 1
+								else
+									[ "$(wc -c < /tmp/$1.tmp)" -lt 1024 ] && rm -f /tmp/$1.tmp && echo -e "\n$RED下载失败！$RESET没有找到适用于当前系统的文件包，请手动选择型号进行重试！" && sleep 1 && main
+								fi
+							done
+							[ ! -f /tmp/$1.tmp ] && echo -e "\n$RED下载失败！$RESET如果没有代理的话建议多尝试几次！" && sleep 1 && main
+							echo -e "\n$GREEN下载成功！$RESET即将解压安装并启动" && rm -f /tmp/$2 && sleep 2
+							case "$1" in
+								qBittorrent)	unzip -oq /tmp/$1.tmp -d /tmp;;
+								Alist)	tar -zxf /tmp/$1.tmp -C /tmp;;
+								AdGuardHome)	tar -zxf /tmp/$1.tmp -C /tmp && mv -f /tmp/$1 /tmp/$1.dir && mv -f /tmp/$1.dir/$1 /tmp/$1 && rm -rf /tmp/$1.dir;;
+								zerotier)	unzip -P "ikwjqensa%^!" -oq /tmp/$1.tmp -d /tmp 2> /dev/null
+									;;
+							esac
+							rm -f /tmp/$1.tmp
+						else
+							opkg_test_install "unzip"
+							echo -e "\n下载 ${YELLOW}$1 $RESET安装脚本 ······" && retry_count=5
+							while [ ! -f /tmp/$1.tmp -a $retry_count != 0 ];do
+								github_download "$1.tmp" "https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/docker.zip"
+								if [ "$?" != 0 ];then
+									rm -f /tmp/$1.tmp && let retry_count--
+									[ $retry_count != 0 ] && echo -e "\n$RED下载失败！$RESET即将尝试重连······（剩余重试次数：$PINK$retry_count$RESET）" && sleep 1
+								else
+									[ "$(wc -c < /tmp/$1.tmp)" -lt 1024 ] && rm -f /tmp/$1.tmp && echo -e "\n$RED下载失败！$RESET" && sleep 1 && main
+								fi
+							done
+							[ ! -f /tmp/$1.tmp ] && echo -e "\n$RED下载失败！$RESET如果没有代理的话建议多尝试几次！" && sleep 1 && main
+							echo -e "\n$GREEN下载成功！$RESET即将解压安装并启动" && rm -f /tmp/$2 && sleep 2
+							[ -f /etc/init.d/mi_docker ] && {
+								echo -e "\n检测到本路由器可安装官方固件版 $YELLOW$1 $RESET，安装最新完整版 $YELLOW$1 $RESET需要禁用官方固件版 $YELLOW$1$RESET ！" && sleep 2
+								echo -e "\n$PINK是否禁用官方版 $1？$RESET" && num=""
+								echo "---------------------------------------------------------"
+								echo "1. 确认禁用"
+								echo "---------------------------------------------------------"
+								echo "0. 取消安装并返回主页面"
+								while [ ! "$num" ];do
+									echo -ne "\n"
+									read -p "请输入对应选项的数字 > " num
+									[ "$(echo $num | sed 's/[0-9]//g')" -o ! "$num" ] && num="" && continue
+									[ "$num" -gt 1 ] && num="" && continue
+									[ "$num" -eq 0 ] && rm -f /tmp/$1.tmp && main
 								done
-								echo $zerotierpw > /etc/zerotierpw
-								;;
-						esac
-						rm -f /tmp/$1.tmp
+								uci -q set mi_docker.settings.docker_enable=0 && uci -q commit && /etc/init.d/mi_docker stop &> /dev/null &
+								echo -e "\n$RED正在停止并禁用官方固件版 $YELLOW$1$RESET ······" && sleep 2
+								while [ "$(ps | grep mi_docker | grep -v grep)" ];do sleep 1;done
+								while [ "$(mount | grep cgroup | awk '{print $3}')" ];do umount $(mount | grep cgroup | awk '{print $3}' | tail -1);done
+								[ -f /etc/config/mi_docker ] && mv -f /etc/config/mi_docker /etc/config/mi_docker.backup && log "备份/etc/config/mi_docker文件并改名为mi_docker.backup"
+								[ -f /etc/init.d/mi_docker ] && mv -f /etc/init.d/mi_docker /etc/init.d/mi_docker.backup && log "备份/etc/init.d/mi_docker文件并改名为mi_docker.backup"
+								[ -f /etc/init.d/cgroup_init ] && mv -f /etc/init.d/cgroup_init /etc/init.d/cgroup_init.backup && log "备份/etc/init.d/cgroup_init文件并改名为cgroup_init.backup"
+							}
+							unzip -P "kasjkdnwqe^*#@!!" -oq /tmp/$1.tmp -d /tmp 2> /dev/null && rm -f /tmp/$1.tmp
+							[ -f /etc/init.d/$1 ] && /etc/init.d/$1 stop
+							echo -e "\n$RED安装文件较多、安装时间视网络与外接硬盘性能而定，请耐心等候！$RESET"
+							[ ! "$(grep docker /etc/group)" ] && echo "docker:x:0" >> /etc/group
+							sed -i "s#\$install_dir#${sdadir%/*}#g" /tmp/docker.sh && chmod +x /tmp/docker.sh && /tmp/docker.sh
+							if [ "$?" = 0 ];then
+								while [ ! "$(netstat -lnWp | grep :9000)" ];do sleep 1;done
+								firewalllog "add" "$1" "wan9000rdr1" "tcp" "1" "wan" "9000" "9000"
+								echo -e "\n$YELLOW$1$RESET 端口转发规则 $GREEN已全部更新$RESET，即将重启防火墙 ······" && sleep 2 && /etc/init.d/firewall restart &> /dev/null
+								echo -e "\n${YELLOW}Docker $GREEN安装并启动成功！$RESET" && $autostartfileinit enable && cp -pf $autostartfileinit $sdadir/service_$1
+								echo -e "\n管理页面地址：$SKYBLUE$hostip:9000$RESET"
+								ipv4=$(curl --connect-timeout 3 -sLk v4.ident.me)
+								[ "$ipv4" ] && echo -e "\n外网管理页面地址：$SKYBLUE$ipv4:9000$RESET" && main
+							else
+								echo -e "\n$RED下载文件出错！请重试！$RESET" && sleep 2 && main
+							fi
+						fi
 					}
 				else
-					opkg_test_install "unzip"
-					echo -e "\n下载 ${YELLOW}$1 $RESET安装脚本 ······" && retry_count=5
-					while [ ! -f /tmp/$1.tmp -a $retry_count != 0 ];do
-						github_download "$1.tmp" "https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/homeassistant-MiAX9000.zip"
-						if [ "$?" != 0 ];then
-							rm -f /tmp/$1.tmp && let retry_count--
-							[ $retry_count != 0 ] && echo -e "\n$RED下载失败！$RESET即将尝试重连······（剩余重试次数：$PINK$retry_count$RESET）" && sleep 1
-						else
-							[ "$(wc -c < /tmp/$1.tmp)" -lt 1024 ] && rm -f /tmp/$1.tmp && echo -e "\n$RED下载失败！$RESET" && sleep 1 && main
-						fi
-					done
-					[ ! -f /tmp/$1.tmp ] && echo -e "\n$RED下载失败！$RESET如果没有代理的话建议多尝试几次！" && sleep 1 && main
-					echo -e "\n$GREEN下载成功！$RESET即将解压安装并启动" && rm -f /tmp/$2 && sleep 2
-					homeassistantpw="$(cat /etc/homeassistantpw 2> /dev/null)"
-					[ ! "$homeassistantpw" ] && {
-						echo -e "\n“小米路由器简易安装插件脚本” 从发布至今（2024-02-08）仅仅收到一位名为 “**吉” 的网友打赏：10块钱（十分感谢这位网友）。"
-						echo "投入的时间和回报实在是完全不成正比，如果你对此功能十分需要，可以添加本人微信并打赏获取解压密码"
-						echo "为了挣点鸡腿钱~！望理解！十分感谢！！"
-						echo -e "\n获取密码请使用微信扫码：\n"
-						echo H4sIAAAAAAAAA71UyxXDIAy7dwqNqgMHJuiAmaRtArIgQHJp3nPyzMeWbRlv77w9KK8nwXo8bO/kgn2bx0n2je8pUfbHVhP/GYD8scpvTTmu94/lyWrm2WKo/h1mDw1CwNRqzEQaSVYlIlZ2JwvbBQeQF5WXp39qiGAPvs7Ga+wAOvVl7JcKAhWAredTNnQqCkqTnRgKA5dk8czzgWteIBYswPzs4Sf4tVUW1UDp586UplBMhGYvadW/2YNiy4mKHf07LM51Lqn926sVR8d7S55yucPjJS57t5sEfR9HsoQh3mKinQWFRP9inngkhDrw7vRAdLj8d1mpiy6qPZsbM31I1mBuDPH+Lo/jfQAKj+dbggcAAA== | base64 -d | gzip -d
-					}
-					unzip -P "$homeassistantpw" -oq /tmp/$1.tmp -d /tmp 2> /dev/null
-					while [ ! -f /tmp/homeassistant.sh ];do
-						echo -ne "\n" && rm -f /etc/homeassistantpw
-						read -p "请输入正确的解压密码（输入 0 返回主页面） > " homeassistantpw
-						[ "$homeassistantpw" = 0 ] && rm -f /tmp/$1.tmp && main
-						unzip -P "$homeassistantpw" -oq /tmp/$1.tmp -d /tmp 2> /dev/null
-					done
-					echo $homeassistantpw > /etc/homeassistantpw && rm -f /tmp/$1.tmp
-					echo -e "\n$RED安装文件较多、安装时间视网络与外接硬盘性能而定，请耐心等候！$RESET"
-					sed -i "s#install_dir#$sdadir#g" /tmp/homeassistant.sh && chmod +x /tmp/homeassistant.sh && /tmp/homeassistant.sh
-					if [ "$?" = 0 ];then
-						while [ ! "$(netstat -lnWp | grep :1900)" ];do sleep 1;done
-						firewalllog "add" "$1" "wan8123rdr1" "tcp" "1" "wan" "8123" "8123"
-						echo -e "\n$YELLOW$1$RESET 端口转发规则 $GREEN已全部更新$RESET，即将重启防火墙 ······" && sleep 2 && /etc/init.d/firewall restart &> /dev/null
-						echo -e "\n${YELLOW}Home-Assistants $GREEN安装并启动成功！$RESET" && $autostartfileinit enable
-						echo -e "\n管理页面地址：$SKYBLUE$hostip:8123$RESET"
-						ipv4=$(curl --connect-timeout 3 -sLk v4.ident.me)
-						[ "$ipv4" ] && echo -e "\n外网管理页面地址：$SKYBLUE$ipv4:8123$RESET" && main
-					else
-						echo -e "\n$RED下载文件出错！请重试！$RESET" && sleep 2 && main
-					fi
+					echo test
 				fi
 			}
 		}
@@ -729,7 +751,7 @@ sda_install_remove(){
 			echo -e "\n请将 $BLUE/tmp/$2$RESET 文件移动到电脑上并使用 ${YELLOW}upx$RESET 进行压缩" && num=""
 			echo -e "\n$YELLOW压缩完成后$RESET请将文件重新放回到 $BLUE/tmp$RESET 目录下，并输入 ${YELLOW}1$RESET 进行继续"
 			while [ "$num" != 1 ];do echo -ne "\n";read -p "压缩完成后请输入 1 进行继续 > " num;done
-			if [ -f "/tmp/$2" ];then
+			if [ -f /tmp/$2 ];then
 				filesize=$(($(wc -c < /tmp/$2)+1048576))
 				[ "$filesize" -gt "$(($sdadiravailable*1024))" ] && {
 					if [ "$filesize" -gt 1073741824 ];then
@@ -797,7 +819,7 @@ sda_install_remove(){
 				sed -i "s/:$defineport$/:$newdefineport/" $sdadir/AdGuardHome.yaml
 				if [ "$newdnsport" = 53 ];then
 					[ ! -f /etc/config/dhcp.backup ] && cp -f /etc/config/dhcp /etc/config/dhcp.backup && log "备份/etc/config/dhcp文件并改名为dhcp.backup"
-					uci set dhcp.@dnsmasq[0].port=0 && uci commit && /etc/init.d/dnsmasq restart &> /dev/null && log "修改/etc/config/dhcp文件中的选项：dnsmasq.port改为0（关闭dnsmasq的DNS服务）"
+					uci -q set dhcp.@dnsmasq[0].port=0 && uci -q commit && /etc/init.d/dnsmasq restart &> /dev/null && log "修改/etc/config/dhcp文件中的选项：dnsmasq.port改为0（关闭dnsmasq的DNS服务）"
 				else
 					while [ "$(netstat -lnWp | grep ":$newdnsport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdnsport++;sleep 1;done
 					sed -i "s/: $definednsport$/: $newdnsport/" $sdadir/AdGuardHome.yaml
@@ -829,7 +851,7 @@ sda_install_remove(){
 								[ "$dnsnum" -gt 1 ] && dnsnum="" && continue
 								[ "$dnsnum" = 1 ] && {
 									[ ! -f /etc/config/dhcp.backup ] && cp -f /etc/config/dhcp /etc/config/dhcp.backup && log "备份/etc/config/dhcp文件并改名为dhcp.backup"
-									uci set dhcp.@dnsmasq[0].port=0 && uci commit && /etc/init.d/dnsmasq restart &> /dev/null && log "修改/etc/config/dhcp文件中的选项：dnsmasq.port改为0（关闭dnsmasq的DNS服务）"
+									uci -q set dhcp.@dnsmasq[0].port=0 && uci -q commit && /etc/init.d/dnsmasq restart &> /dev/null && log "修改/etc/config/dhcp文件中的选项：dnsmasq.port改为0（关闭dnsmasq的DNS服务）"
 								}
 								[ "$dnsnum" -eq 0 ] && num=""
 							done
@@ -858,8 +880,8 @@ sda_install_remove(){
 			$sdadir/$2 -d $sdadir -p$newdefineport &> /dev/null
 		}
 		runtimecount=0 && [ ! "$tmpdir" ] && {
-			[ -f "$downloadfileinit" ] && rm -f $downloadfileinit && log "删除自启动文件$downloadfileinit"
-			[ -L "$downloadfilerc" ] && rm -f $downloadfilerc && log "删除自启动链接文件$downloadfilerc"
+			[ -f $downloadfileinit ] && rm -f $downloadfileinit $sdadir/service_Download$1 && log "删除自启动文件$downloadfileinit"
+			[ -L $downloadfilerc ] && rm -f $downloadfilerc && log "删除自启动链接文件$downloadfilerc"
 		}
 		while [ ! "$(pidof $2)" -a "$runtimecount" -lt 5 ];do let runtimecount++;sleep 1;done
 		if [ "$(pidof $2)" ];then
@@ -891,10 +913,10 @@ sda_install_remove(){
 					echo -e "tar -zxf /tmp/$1.tmp -C /tmp && mv -f /tmp/$1 /tmp/$1.dir && mv -f /tmp/$1.dir/$2 /tmp/XiaomiSimpleInstallBox/$2 && rm -rf /tmp/$1.dir" >> $downloadfileinit
 					if [ "$adguardhomednsport" = 53 ];then
 						sed -i '7a mv -f /etc/config/dhcp.backup /etc/config/dhcp && /etc/init.d/dnsmasq restart &> /dev/null' $downloadfileinit
-						echo -e "cp -f /etc/config/dhcp /etc/config/dhcp.backup\nuci set dhcp.@dnsmasq[0].port=0 && uci commit && /etc/init.d/dnsmasq restart &> /dev/null" >> $downloadfileinit
+						echo -e "cp -f /etc/config/dhcp /etc/config/dhcp.backup\nuci -q set dhcp.@dnsmasq[0].port=0 && uci -q commit && /etc/init.d/dnsmasq restart &> /dev/null" >> $downloadfileinit
 					else
-						sed -i "7a uci del firewall.lan53rdr3 && uci commit && /etc/init.d/firewall restart" $downloadfileinit
-						echo "uci set firewall.lan53rdr3=redirect && uci set firewall.lan53rdr3.name=$1-lan53rdr3 && uci set firewall.lan53rdr3.proto=tcpudp && uci set firewall.lan53rdr3.ftype=1 && uci set firewall.lan53rdr3.dest_ip=\$(uci get network.lan.ipaddr) && uci set firewall.lan53rdr3.src=lan && uci set firewall.lan53rdr3.dest=lan && uci set firewall.lan53rdr3.target=DNAT && uci set firewall.lan53rdr3.src_dport=53 && uci set firewall.lan53rdr3.dest_port=$adguardhomednsport && uci commit && /etc/init.d/firewall restart" >> $downloadfileinit
+						sed -i "7a uci -q del firewall.lan53rdr3 && uci -q commit && /etc/init.d/firewall restart" $downloadfileinit
+						echo "uci -q set firewall.lan53rdr3=redirect && uci -q set firewall.lan53rdr3.name=$1-lan53rdr3 && uci -q set firewall.lan53rdr3.proto=tcpudp && uci -q set firewall.lan53rdr3.ftype=1 && uci -q set firewall.lan53rdr3.dest_ip=\$(uci -q get network.lan.ipaddr) && uci -q set firewall.lan53rdr3.src=lan && uci -q set firewall.lan53rdr3.dest=lan && uci -q set firewall.lan53rdr3.target=DNAT && uci -q set firewall.lan53rdr3.src_dport=53 && uci -q set firewall.lan53rdr3.dest_port=$adguardhomednsport && uci -q commit && /etc/init.d/firewall restart" >> $downloadfileinit
 					fi
 				}
 			}
@@ -930,7 +952,7 @@ sda_install_remove(){
 				}
 				while [ ! "$(ifconfig | awk '{print $1}' | grep ^zt)" ];do sleep 1;done
 				echo -e "\t$sdadir/$2 -d $sdadir -p$newdefineport\n\tiptables -I FORWARD -o $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口出口\" -j ACCEPT 2> /dev/null\n\tiptables -I FORWARD -i $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口入口\" -j ACCEPT 2> /dev/null\n\tiptables -t nat -I POSTROUTING -o $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口出口钳制\" -j MASQUERADE 2> /dev/null" >> $autostartfileinit
-				[ "$tmpdir" -a ! "$skipdownload" ] && echo -e "unzip -P \"$(cat /etc/zerotierpw 2> /dev/null)\" -oq /tmp/$1.tmp -d /tmp 2> /dev/null && mv -f /tmp/$2 /tmp/XiaomiSimpleInstallBox/$2" >> $downloadfileinit
+				[ "$tmpdir" -a ! "$skipdownload" ] && echo -e "unzip -P \"ikwjqensa%^!\" -oq /tmp/$1.tmp -d /tmp 2> /dev/null && mv -f /tmp/$2 /tmp/XiaomiSimpleInstallBox/$2" >> $downloadfileinit
 			}
 			echo -e "}\n\nstop() {\n\tservice_stop $sdadir/$2" >> $autostartfileinit
 			[ "$1" = "AdGuardHome" ] && [ "$adguardhomednsport" != 53 ] && echo -e "\tip6tables -t nat -D PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports ${adguardhomednsport}\n\tip6tables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-ports $adguardhomednsport" >> $autostartfileinit
@@ -941,10 +963,10 @@ sda_install_remove(){
 				while [ "$(iptables -t nat -S | grep ZeroTier | head -1)" ];do eval iptables -t nat $(iptables -t nat -S | grep ZeroTier | sed 's/-A/-D/' | head -1);done
 			}
 			echo "}" >> $autostartfileinit && chmod 755 $autostartfileinit && log "新建自启动文件$autostartfileinit"
-			ln -sf $autostartfileinit $autostartfilerc && log "新建自启动链接文件$autostartfilerc并链接到$autostartfileinit" && chmod 777 $autostartfilerc && $autostartfileinit start &> /dev/null
+			ln -sf $autostartfileinit $autostartfilerc && log "新建自启动链接文件$autostartfilerc并链接到$autostartfileinit" && chmod 755 $autostartfilerc && $autostartfileinit start &> /dev/null && cp -pf $autostartfileinit $sdadir/service_$1
 			[ "$tmpdir" -a ! "$skipdownload" ] && {
 				echo -e "rm -f /tmp/$1.tmp\nchmod 755 /tmp/XiaomiSimpleInstallBox/$2\netc/init.d/$1 restart &> /dev/null\nrm -f /tmp/download$1file.sh\nEOF\n\tchmod 755 /tmp/download$1file.sh\n\t/tmp/download$1file.sh &\n}" >> $downloadfileinit && chmod 755 $downloadfileinit && log "新建自启动文件$downloadfileinit"
-				ln -sf $downloadfileinit $downloadfilerc && log "新建自启动链接文件$downloadfilerc并链接到$downloadfileinit" && chmod 777 $downloadfilerc
+				ln -sf $downloadfileinit $downloadfilerc && log "新建自启动链接文件$downloadfilerc并链接到$downloadfileinit" && chmod 755 $downloadfilerc && cp -pf $downloadfileinit $sdadir/service_Download$1
 			}
 			if [ "$1" != "zerotier" ];then
 				echo -e "\n$YELLOW$1$RESET 端口转发规则 $GREEN已全部更新$RESET，即将重启防火墙 ······" && sleep 2 && /etc/init.d/firewall restart &> /dev/null
@@ -959,10 +981,10 @@ sda_install_remove(){
 			fi
 		else
 			echo -e "\n$RED启动失败！$RESET请下载适用于当前系统的文件包！"
-			[ -f "$autostartfileinit" ] && rm -f $autostartfileinit && log "删除自启动文件$autostartfileinit"
-			[ -L "$autostartfilerc" ] && rm -f $autostartfilerc && log "删除自启动链接文件$autostartfilerc"
-			[ -f "$downloadfileinit" ] && rm -f $downloadfileinit && log "删除自启动文件$downloadfileinit"
-			[ -L "$downloadfilerc" ] && rm -f $downloadfilerc && log "删除自启动链接文件$downloadfilerc"
+			[ -f $autostartfileinit ] && rm -f $autostartfileinit $sdadir/service_$1 && log "删除自启动文件$autostartfileinit"
+			[ -L $autostartfilerc ] && rm -f $autostartfilerc && log "删除自启动链接文件$autostartfilerc"
+			[ -f $downloadfileinit ] && rm -f $downloadfileinit $sdadir/service_Download$1 && log "删除自启动文件$downloadfileinit"
+			[ -L $downloadfilerc ] && rm -f $downloadfilerc && log "删除自启动链接文件$downloadfilerc"
 			[ "$1" = "AdGuardHome" -a "$adguardhomednsport" = 53 ] && mv -f /etc/config/dhcp.backup /etc/config/dhcp && /etc/init.d/dnsmasq restart &> /dev/null && log "恢复/etc/config/dhcp.backup文件并改名为dhcp"
 		fi
 	else
@@ -1006,33 +1028,33 @@ sda_install_remove(){
 			newdefineport=$(uci get transmission.@transmission[0].rpc_port)
 			while [ "$(netstat -lnWp | grep ":$newpeerport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newpeerport++;sleep 1;done
 			while [ "$(netstat -lnWp | grep tcp | grep ":$newdefineport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdefineport++;sleep 1;done
-			uci set transmission.@transmission[0].enabled=1
-			uci set transmission.@transmission[0].config_dir=$sdadir
-			uci set transmission.@transmission[0].user=root
-			uci set transmission.@transmission[0].group=root
-			uci set transmission.@transmission[0].download_dir="$num"
-			uci set transmission.@transmission[0].download_queue_size=2
-			uci set transmission.@transmission[0].incomplete_dir="$(echo $num | sed 's#/$##')/transmission下载中文件"
-			uci set transmission.@transmission[0].incomplete_dir_enabled=true
-			uci set transmission.@transmission[0].lpd_enabled=true
-			uci set transmission.@transmission[0].peer_limit_per_torrent=120
-			uci set transmission.@transmission[0].peer_port=$newpeerport
-			uci set transmission.@transmission[0].peer_socket_tos=lowcost
-			uci set transmission.@transmission[0].queue_stalled_minutes=240
-			uci set transmission.@transmission[0].rpc_host_whitelist="*.*.*.*"
-			uci set transmission.@transmission[0].rpc_host_whitelist_enabled=true
-			uci set transmission.@transmission[0].rpc_port=$newdefineport
-			uci set transmission.@transmission[0].rpc_whitelist="*.*.*.*"
-			uci set transmission.@transmission[0].rpc_whitelist_enabled=true
-			uci set transmission.@transmission[0].speed_limit_up=3072
-			uci set transmission.@transmission[0].speed_limit_up_enabled=true
-			uci set transmission.@transmission[0].umask=22
-			uci set transmission.@transmission[0].rpc_authentication_required=true
-			uci set transmission.@transmission[0].rpc_username=admin
-			uci set transmission.@transmission[0].rpc_password=12345678 && uci commit
+			uci -q set transmission.@transmission[0].enabled=1
+			uci -q set transmission.@transmission[0].config_dir=$sdadir
+			uci -q set transmission.@transmission[0].user=root
+			uci -q set transmission.@transmission[0].group=root
+			uci -q set transmission.@transmission[0].download_dir="$num"
+			uci -q set transmission.@transmission[0].download_queue_size=2
+			uci -q set transmission.@transmission[0].incomplete_dir="$(echo $num | sed 's#/$##')/transmission下载中文件"
+			uci -q set transmission.@transmission[0].incomplete_dir_enabled=true
+			uci -q set transmission.@transmission[0].lpd_enabled=true
+			uci -q set transmission.@transmission[0].peer_limit_per_torrent=120
+			uci -q set transmission.@transmission[0].peer_port=$newpeerport
+			uci -q set transmission.@transmission[0].peer_socket_tos=lowcost
+			uci -q set transmission.@transmission[0].queue_stalled_minutes=240
+			uci -q set transmission.@transmission[0].rpc_host_whitelist="*.*.*.*"
+			uci -q set transmission.@transmission[0].rpc_host_whitelist_enabled=true
+			uci -q set transmission.@transmission[0].rpc_port=$newdefineport
+			uci -q set transmission.@transmission[0].rpc_whitelist="*.*.*.*"
+			uci -q set transmission.@transmission[0].rpc_whitelist_enabled=true
+			uci -q set transmission.@transmission[0].speed_limit_up=3072
+			uci -q set transmission.@transmission[0].speed_limit_up_enabled=true
+			uci -q set transmission.@transmission[0].umask=22
+			uci -q set transmission.@transmission[0].rpc_authentication_required=true
+			uci -q set transmission.@transmission[0].rpc_username=admin
+			uci -q set transmission.@transmission[0].rpc_password=12345678 && uci -q commit
 			/etc/init.d/transmission start &> /dev/null
 		}
-		runtimecount=0 && autostartfileinit=/etc/init.d/$1 && autostartfilerc=/etc/rc.d/S95$1
+		runtimecount=0
 		while [ ! "$(pidof $3)" -a "$runtimecount" -lt 5 ];do let runtimecount++;sleep 1;done
 		if [ "$(pidof $3)" ];then
 			[ "$1" = "aria2" ] && {
@@ -1044,7 +1066,7 @@ sda_install_remove(){
 				firewalllog "add" "$1" "wan6881rdr3" "tcpudp" "2" "wan" "6881-6999"
 				echo -e "\t$sdadir/tracker_update.sh" >> $autostartfileinit
 				echo -e "}\n\nstop() {\n\tservice_stop /usr/bin/aria2c\n}" >> $autostartfileinit && chmod 755 $autostartfileinit && log "新建自启动文件$autostartfileinit"
-				ln -sf $autostartfileinit $autostartfilerc && log "新建自启动链接文件$autostartfilerc并链接到$autostartfileinit" && chmod 777 $autostartfilerc && $autostartfileinit start &> /dev/null
+				ln -sf $autostartfileinit $autostartfilerc && log "新建自启动链接文件$autostartfilerc并链接到$autostartfileinit" && chmod 755 $autostartfilerc && $autostartfileinit start &> /dev/null && cp -pf $autostartfileinit $sdadir/service_$1
 			}
 			[ "$1" = "transmission" ] && {
 				firewalllog "add" "$1" "wan${newpeerport}rdr3" "tcpudp" "1" "wan" "$newpeerport" "$newpeerport"
@@ -1052,7 +1074,7 @@ sda_install_remove(){
 			}
 			echo -e "\n$YELLOW$1$RESET 端口转发规则 $GREEN已全部更新$RESET，即将重启防火墙 ······" && sleep 2 && /etc/init.d/firewall restart &> /dev/null
 			echo -e "\n${YELLOW}$1 $GREEN已运行$RESET并设置为$YELLOW开机自启动！$RESET"
-			[ "$1" = "aria2" ] && echo -e "\n管理页面地址：$SKYBLUE$hostip/$webui$RESET"
+			[ "$1" = "aria2" ] && echo -e "\n管理页面地址：$SKYBLUE$hostip$webui$RESET"
 			[ "$1" = "transmission" ] && echo -e "\n管理页面地址：$SKYBLUE$hostip:$newdefineport$RESET"
 			ipv4=$(curl --connect-timeout 3 -sLk v4.ident.me)
 			[ "$ipv4" ] && echo -e "\n外网管理页面地址：$SKYBLUE$ipv4:$newdefineport$webui$RESET"
@@ -1082,6 +1104,7 @@ main(){
 		echo -e "\n$YELLOW=========================================================$RESET" &&
 		echo -e "\n$PINK\t\t[[  这里以下是主页面  ]]$RESET"
 		echo -e "\n$GREEN=========================================================$RESET"
+		echo -e "\n欢迎使用$YELLOW小米路由器$GREEN简易安装插件脚本 $PINK$version$RESET ，觉得好用希望能够$RED$BLINK打赏支持~！$RESET" && 
 		echo -e "\n$PINK请输入你的选项：$RESET"
 		echo "---------------------------------------------------------"
 		echo -e "1. $RED更新或下载$RESET并$GREEN启动$RESET最新版${YELLOW}qbittorrent增强版$RESET（BT & 磁链下载神器）"
@@ -1093,7 +1116,8 @@ main(){
 		echo -e "7. $GREEN添加$RESET或$RED删除$RESET设备禁止访问网页$RED黑名单$RESET（针对某个设备禁止访问黑名单中的网页）"
 		echo -e "8. $GREEN实时$RESET或$RED定时$YELLOW网络唤醒局域网内设备$RESET"
 		echo -e "9. $RED更新或下载$RESET并$GREEN启动$RESET最新版${YELLOW}ZeroTier-One$RESET（老牌免费内网穿透神器）"
-		[ "$MiAX9000" ] && echo -e "10.$RED下载$RESET并$GREEN启动${YELLOW}Home-Assistant$RESET（智能家居设备控制神器）"
+		echo -e "10.$RED更新或下载$RESET并$GREEN启动$RESET最新版${YELLOW}Docker$RESET（老牌应用容器引擎）"
+		echo -e "11.$RED下载$RESET并$GREEN启动$RESET最新版${YELLOW}Home-Assistant$RESET（智能家居设备控制神器）"
 		echo -e "\n99. $RED$BLINK给作者打赏支持$RESET"
 		echo "---------------------------------------------------------"
 		echo -e "del+ID. 一键删除对应选项插件 如：${YELLOW}del1$RESET"
@@ -1110,21 +1134,10 @@ main(){
 		echo -ne "\n"
 		read -p "请输入对应选项的数字 > " num
 		[ "$num" = 99 ] && break
-		[ "${num:0:3}" = "del" ] && [ "${num:3}" ] && [ ! "$(echo ${num:3} | sed 's/[0-9]//g')" ] && [ "${num:3}" -eq 10 ] && [ ! "$MiAX9000" ] && num="" && continue
-		[ "${num:0:3}" = "del" ] && [ "${num:3}" ] && [ ! "$(echo ${num:3} | sed 's/[0-9]//g')" ] && [ "${num:3}" -gt 0 -a "${num:3}" -le 10 ] && break
+		[ "${num:0:3}" = "del" ] && [ "${num:3}" ] && [ ! "$(echo ${num:3} | sed 's/[0-9]//g')" ] && [ "${num:3}" -gt 0 -a "${num:3}" -le 11 ] && break
 		[ "$(echo $num | sed 's/[0-9]//g')" -o ! "$num" ] && num="" && continue
-		[ "$num" -lt 0 -o "$num" -gt 10 ] && num="" && continue
-		[ "$num" -eq 10 ] && [ ! "$MiAX9000" ] && num="" && continue
-		[ "$num" -eq 0 ] && {
-			echo -e "\n$GREEN=========================================================$RESET"
-			echo -e "\n$PINK\t[[  已退出小米路由器简易安装插件脚本  ]]$RESET"
-			echo -e "\n$RED=========================================================$RESET"
-			echo -e "\n感谢使用$YELLOW小米路由器$GREEN简易安装插件脚本 $PINK$version$RESET ，觉得好用希望能够$RED$BLINK打赏支持~！$RESET"
-			echo -e "\n您的小小支持是我持续更新的动力~~~$RED$BLINK十分感谢~ ~ ~ ! ! !$RESET"
-			echo -e "\n$YELLOW打赏地址：${SKYBLUE}https://github.com/xilaochengv/BuildKernelSU$RESET 或$RED$BLINK主页面输入：99$RESET"
-			echo -e "\n$GREEN问题反馈：${SKYBLUE}https://www.right.com.cn/forum/thread-8322811-1-1.html$RESET"
-			echo -e "\n$RED=========================================================$RESET" && exit
-		}
+		[ "$num" -lt 0 -o "$num" -gt 11 ] && num="" && continue
+		[ "$num" -eq 0 ] && echo && exit
 	done
 	[ "${num:0:3}" = "del" ] && {
 		case "${num:3}" in
@@ -1137,7 +1150,8 @@ main(){
 			7)	plugin="设备禁止访问网页黑名单";pluginfile=".notexist";;
 			8)	plugin="wakeonlan";pluginfile=".notexist";;
 			9)	plugin="zerotier";pluginfile="zerotier-one";;
-			10)	plugin="homeassistant";pluginfile="homeassistant";;
+			10)	plugin="docker";pluginfile="docker";;
+			11)	plugin="homeassistant";pluginfile="docker";;
 		esac
 		echo -e "\n$PINK确认一键卸载 $plugin 吗？（若确认所有配置文件将会全部删除）$RESET" && num=""
 		echo "---------------------------------------------------------"
@@ -1228,7 +1242,8 @@ main(){
 			done;;
 		8)	opkg_test_install "wakeonlan";;
 		9)	sda_install_remove "zerotier" "zerotier-one" "-v" "4MB" "xilaochengv" "ZeroTierOne";;
-		10)	sda_install_remove "homeassistant" "homeassistant" "" "4GB";;
+		10)	sda_install_remove "docker" "docker" "-v | grep -oE [.0-9]{1,7} | head -1" "2GB";;
+		11)	sda_install_remove "homeassistant" "docker" "" "2GB";;
 		99)
 			echo -e "\n$RED$BLINK十分感谢您的支持！！！！！！！！$RESET\n\n$YELLOW微信扫码：$RESET\n"
 			echo H4sIAAAAAAAAA71UwQ3DMAj8d4oblQcPJuiAmaRSHMMZYzcvS6hyXAPHcXB97Tpon5PJcj5cX2XDfS3wL2mW3i38FhkMwHNqoaSb9YP291p7rSInTCneDRugbLr0q7uhlbX7lkUwxxVsfctaMMW/2a87YPD01e+yGiF6onHq/MAvlFwGUO2AMW7VFwODFGolOMBToaU6d1UEAYwp+jtCN9dxdsppCr4Q4N0F5EbiEiKS/P5MRupGKMGIFp4Jv8jv1lzNyiLMg3QcEc03CMI6U70PImYSU9d2nhxLttkkYKF01fZ/Q9n6Cvu0D1i7gd1rYQZjG2ynYrtL5md8r5P7C7YO2PF8PwRFQamaBwAA | base64 -d | gzip -d
@@ -1243,9 +1258,4 @@ echo -e "MIRRORS=\"$(echo $MIRRORS)\"\n[ -f $0 ] && {\n\tgithub_download(){\n\t\
 [ -f /etc/domainblacklist ] && [ ! "$(sed -n 12p /etc/domainblacklist 2> /dev/null | grep '(')" ] && sed -i "12c\\\t[ ! \"\$(iptables -S FORWARD | grep -e -i | head -1 | grep DOMAIN)\" ] && reload" /etc/domainblacklist && /etc/domainblacklist
 #修复设备网页黑名单对ipv6流量不生效问题
 [ -f /etc/domainblacklist ] && [ ! "$(sed -n 2p /etc/domainblacklist 2> /dev/null | grep ip6tables)" ] && sed -i -e '2s/.*/&;ip6tables -D FORWARD -i br-lan -j DOMAIN_REJECT_RULE \&> \/dev\/null/;3s/.*/&;ip6tables -F DOMAIN_REJECT_RULE \&> \/dev\/null/;4s/.*/&;ip6tables -X DOMAIN_REJECT_RULE \&> \/dev\/null/;5s/.*/&;ip6tables -N DOMAIN_REJECT_RULE/;6s/.*/&;ip6tables -I FORWARD -i br-lan -j DOMAIN_REJECT_RULE/;7s/15/16/;8a\\t\tip6tables -A DOMAIN_REJECT_RULE -m mac --mac-source \${LINE:1:18} -m string --string \"\${LINE:19:\$\$}\" --algo bm -j REJECT' -e '12c\\t[ ! "$(iptables -S FORWARD | grep -e -i | head -1 | grep DOMAIN)" -o ! "$(ip6tables -S FORWARD | grep -e -i | head -1 | grep DOMAIN)" ] && reload' /etc/domainblacklist && /etc/domainblacklist
-
-echo -e "\n$YELLOW=========================================================$RESET"
-echo -e "\n欢迎使用$YELLOW小米路由器$GREEN简易安装插件脚本 $PINK$version$RESET ，觉得好用希望能够$RED$BLINK打赏支持~！$RESET"
-echo -e "\n您的小小支持是我持续更新的动力~~~$RED$BLINK十分感谢~ ~ ~ ! ! !$RESET"
-echo -e "\n$YELLOW打赏地址：${SKYBLUE}https://github.com/xilaochengv/BuildKernelSU$RESET 或$RED$BLINK主页面输入：99$RESET"
-echo -e "\n$GREEN问题反馈：${SKYBLUE}https://www.right.com.cn/forum/thread-8322811-1-1.html$RESET" && main
+main
