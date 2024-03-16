@@ -565,186 +565,182 @@ sda_install_remove(){
 		}
 		[ "$upxretry" -eq 0 ] && {
 			[ "$1" != "zerotier" -o "$1" = "zerotier" -a ! -f /tmp/zerotier-one -a ! "$skipdownload" ] && {
-				if [ "$1" != "homeassistant" ];then
-					urls="https://github.com/$5/$6/releases/latest"
-					tag_url="https://api.github.com/repos/$5/$6/releases/latest"
-					echo -e "\n即将获取 ${YELLOW}$1$RESET 最新版本号并下载" && sleep 2 && rm -f /tmp/$1.tmp && retry_count=5 && tag_name=""
-					while [ ! "$tag_name" -a $retry_count != 0 ];do
-						echo -e "\n正在获取最新 ${YELLOW}$1$RESET 版本号 ······ \c" && adtagcount=0
-						if [ "$1" = "AdGuardHome" ];then
-							while [ ! "$(echo $tag_name | grep '\-b')" -a $adtagcount -le 5 ];do
-								tag_url="https://api.github.com/repos/$5/$6/releases?per_page=1&page=$adtagcount"
-								tag_name=$(curl --connect-timeout 3 -sk "$tag_url" | grep tag_name | cut -f4 -d '"')
-								[ "$?" = 0 ] && let adtagcount++
-							done
-						elif [ "$1" = "docker" ];then
-							tag_name=v$(curl -sk https://download.docker.com/linux/static/stable/aarch64/ | grep docker-[0-9] | tail -1 | awk -F \> '{print $1}' | grep -oE '[0-9].*[0-9]')
-						else
+				urls="https://github.com/$5/$6/releases/latest"
+				tag_url="https://api.github.com/repos/$5/$6/releases/latest"
+				echo -e "\n即将获取 ${YELLOW}$1$RESET 最新版本号并下载" && sleep 2 && rm -f /tmp/$1.tmp && retry_count=5 && tag_name=""
+				while [ ! "$tag_name" -a $retry_count != 0 ];do
+					echo -e "\n正在获取最新 ${YELLOW}$1$RESET 版本号 ······ \c" && adtagcount=0
+					if [ "$1" = "AdGuardHome" ];then
+						while [ ! "$(echo $tag_name | grep '\-b')" -a $adtagcount -le 5 ];do
+							tag_url="https://api.github.com/repos/$5/$6/releases?per_page=1&page=$adtagcount"
 							tag_name=$(curl --connect-timeout 3 -sk "$tag_url" | grep tag_name | cut -f4 -d '"')
-						fi
-						[ ! "$tag_name" ] && {
-							let retry_count--
-							[ $retry_count != 0 ] && echo -e "$RED获取失败！$RESET\n\n即将尝试重连······（剩余重试次数：$PINK$retry_count$RESET）" && sleep 1
-						}
-					done
+							[ "$?" = 0 ] && let adtagcount++
+						done
+					elif [ "$1" = "docker" ];then
+						tag_name=v$(curl -sk https://download.docker.com/linux/static/stable/aarch64/ | grep docker-[0-9] | tail -1 | awk -F \> '{print $1}' | grep -oE '[0-9].*[0-9]')
+					else
+						tag_name=$(curl --connect-timeout 3 -sk "$tag_url" | grep tag_name | cut -f4 -d '"')
+					fi
 					[ ! "$tag_name" ] && {
-						echo -e "$RED获取失败！\n\n获取版本号失败！$RESET如果没有代理的话建议多尝试几次！"
-						echo -e "\n如果响应时间很短但获取失败，则是每小时内的请求次数已超过 ${PINK}github$RESET 限制，请更换 ${YELLOW}IP$RESET 或者等待一段时间后再试！" && sleep 1 && main
+						let retry_count--
+						[ $retry_count != 0 ] && echo -e "$RED获取失败！$RESET\n\n即将尝试重连······（剩余重试次数：$PINK$retry_count$RESET）" && sleep 1
 					}
-					echo -e "$GREEN获取成功！$RESET当前最新版本：$PINK$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')$RESET" && sleep 2
-					[ "$old_tag" ] && {
-						new_tag=$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')
-						[ "$old_tag" \> "$new_tag" -o "$old_tag" \= "$new_tag" ] && {
-							echo -e "\n当前已安装最新版 $YELLOW$1 $PINK$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')$RESET ，无需更新！$RESET" && sleep 2
-							echo -e "\n$PINK是否重新下载？$RESET" && downloadnum=""
-							echo "---------------------------------------------------------"
-							echo "1. 重新下载"
-							echo "---------------------------------------------------------"
-							echo "0. 跳过下载"
-							while [ ! "$downloadnum" ];do
-								echo -ne "\n"
-								read -p "请输入对应选项的数字 > " downloadnum
-								[ "$(echo $downloadnum | sed 's/[0-9]//g')" -o ! "$downloadnum" ] && downloadnum="" && continue
-								[ "$downloadnum" -gt 1 ] && downloadnum="" && continue
-								[ "$downloadnum" -eq 0 ] && skipdownload=1 && [ "$1" = "docker" ] && /etc/init.d/$1 start 2> /dev/null && main
-							done
-						}
+				done
+				[ ! "$tag_name" ] && {
+					echo -e "$RED获取失败！\n\n获取版本号失败！$RESET如果没有代理的话建议多尝试几次！"
+					echo -e "\n如果响应时间很短但获取失败，则是每小时内的请求次数已超过 ${PINK}github$RESET 限制，请更换 ${YELLOW}IP$RESET 或者等待一段时间后再试！" && sleep 1 && main
+				}
+				echo -e "$GREEN获取成功！$RESET当前最新版本：$PINK$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')$RESET" && sleep 2
+				[ "$old_tag" ] && {
+					new_tag=$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')
+					[ "$old_tag" \> "$new_tag" -o "$old_tag" \= "$new_tag" ] && {
+						echo -e "\n当前已安装最新版 $YELLOW$1 $PINK$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')$RESET ，无需更新！$RESET" && sleep 2
+						echo -e "\n$PINK是否重新下载？$RESET" && downloadnum=""
+						echo "---------------------------------------------------------"
+						echo "1. 重新下载"
+						echo "---------------------------------------------------------"
+						echo "0. 跳过下载"
+						while [ ! "$downloadnum" ];do
+							echo -ne "\n"
+							read -p "请输入对应选项的数字 > " downloadnum
+							[ "$(echo $downloadnum | sed 's/[0-9]//g')" -o ! "$downloadnum" ] && downloadnum="" && continue
+							[ "$downloadnum" -gt 1 ] && downloadnum="" && continue
+							[ "$downloadnum" -eq 0 ] && skipdownload=1 && [ "$1" = "docker" ] && /etc/init.d/$1 start 2> /dev/null && main
+						done
 					}
-					[ ! "$skipdownload" ] && {
-						if [ "$1" != "docker" ]; then
-							echo -e "\n$PINK请选择型号进行下载：$RESET" && num=""
+				}
+				[ ! "$skipdownload" ] && {
+					if [ "$1" != "docker" ]; then
+						echo -e "\n$PINK请选择型号进行下载：$RESET" && num=""
+						echo "---------------------------------------------------------"
+						echo -e "1. $GREEN自动检测系统型号$RESET"
+						echo "2. aarch64"
+						[ "$1" = zerotier ] && echo "3. arm-eabi" || echo "3. arm"
+						[ "$1" = zerotier ] && echo "4. arm-eabihf" || echo "4. x86_64"
+						echo "5. mips"
+						echo "6. mipsel"
+						echo "7. mips64"
+						echo "8. mips64el"
+						echo "---------------------------------------------------------"
+						echo "0. 返回上一页"
+						echo -e "\n可以在 $SKYBLUE$urls$RESET 中查找并复制下载地址"
+						while [ ! "$num" ];do
+							echo -ne "\n"
+							read -p "请输入对应型号的数字或直接输入以 http 或 ftp 开头的下载地址 > " num
+								case "$num" in
+									1)
+										hardware_type=$(uname -m)
+										[ "$hardware_type" = "aarch64" ] && hardware_type=arm64;;
+									2)	hardware_type=arm64;;
+									3)	hardware_type=arm;;
+									4)	hardware_type=amd64;;
+									5)	hardware_type=mips;;
+									6)	hardware_type=mipsle;;
+									7)	hardware_type=mips64;;
+									8)	hardware_type=mips64le;;
+									0)	sda_install_remove "$1" "$2" "$3" "$4" "$5" "$6" "$7" "return"
+								esac
+							[ "$(echo $num | sed 's/[0-9]//g')" -a "${num:0:4}" != "http" -a "${num:0:3}" != "ftp" -o ! "$num" ] && num="" && continue
+							[ "${num:0:4}" != "http" -a "${num:0:3}" != "ftp" ] && [ "$num" -lt 1 -o "$num" -gt 8 ] && num="" && continue
+							[ "$1" = "qBittorrent" ] && {
+								[ "$hardware_type" = "arm64" ] && hardware_type=aarch64
+								[ "$hardware_type" = "mipsle" ] && hardware_type=mipsel
+								[ "$hardware_type" = "mips64le" ] && hardware_type=mips64el
+								[ "$hardware_type" = "amd64" ] && hardware_type=x86_64
+							}
+							[ "$1" = "AdGuardHome" ] && [ "$hardware_type" = "arm" ] && hardware_type=armv7
+							[ "$1" = "zerotier" ] && {
+								[ "$hardware_type" = "arm64" ] && hardware_type=aarch64
+								[ "$hardware_type" = "mipsle" ] && hardware_type=mipsel
+								[ "$hardware_type" = "mips64le" ] && hardware_type=mips64el
+							}
+						done
+						[ "$1" = "qBittorrent" -o "$1" = "zerotier" ] && opkg_test_install "unzip"
+						echo -e "\n下载 ${YELLOW}$1 $(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')$RESET ······" && retry_count=5 && eabi="" && softfloat="" && url=""
+						while [ ! -f /tmp/$1.tmp -a $retry_count != 0 ];do
+							[ "$hardware_type" = "arm" ] && eabi="eabi"
+							[ "$1" = "zerotier" ] && [ "$hardware_type" = "amd64" ] && hardware_type=arm && eabi="eabihf"
+							[ "${hardware_type:0:4}" = "mips" ] && softfloat="_softfloat"
+							[ "$1" = "qBittorrent" ] && url="https://github.com/c0re100/qBittorrent-Enhanced-Edition/releases/download/$tag_name/qbittorrent-enhanced-nox_$hardware_type-linux-musl${eabi}_static.zip"
+							[ "$1" = "Alist" ] && url="https://github.com/$5/$6/releases/download/$tag_name/alist-linux-musl$eabi-$hardware_type.tar.gz"
+							[ "$1" = "AdGuardHome" ] && url="https://github.com/$5/$6/releases/download/$tag_name/AdGuardHome_linux_$hardware_type$softfloat.tar.gz"
+							[ "$1" = "zerotier" ] && url="https://github.com/$5/$6/releases/download/$tag_name/zerotier-one-$hardware_type-linux-musl$eabi.zip"
+							if [ "${num:0:4}" = "http" -o "${num:0:3}" = "ftp" ];then
+								url="$num" && echo "" && curl --connect-timeout 3 -#Lko /tmp/$1.tmp "$url"
+							else
+								github_download "$1.tmp" "$url"
+							fi
+							if [ "$?" != 0 ];then
+								rm -f /tmp/$1.tmp && let retry_count--
+								[ $retry_count != 0 ] && echo -e "\n$RED下载失败！$RESET即将尝试重连······（剩余重试次数：$PINK$retry_count$RESET）" && sleep 1
+							else
+								[ "$(wc -c < /tmp/$1.tmp)" -lt 1024 ] && rm -f /tmp/$1.tmp && echo -e "\n$RED下载失败！$RESET没有找到适用于当前系统的文件包，请手动选择型号进行重试！" && sleep 1 && main
+							fi
+						done
+						[ ! -f /tmp/$1.tmp ] && echo -e "\n$RED下载失败！$RESET如果没有代理的话建议多尝试几次！" && sleep 1 && main
+						echo -e "\n$GREEN下载成功！$RESET即将解压安装并启动" && rm -f /tmp/$2 && sleep 2
+						case "$1" in
+							qBittorrent)	unzip -oq /tmp/$1.tmp -d /tmp;;
+							Alist)	tar -zxf /tmp/$1.tmp -C /tmp;;
+							AdGuardHome)	tar -zxf /tmp/$1.tmp -C /tmp && mv -f /tmp/$1 /tmp/$1.dir && mv -f /tmp/$1.dir/$1 /tmp/$1 && rm -rf /tmp/$1.dir;;
+							zerotier)	unzip -P "ikwjqensa%^!" -oq /tmp/$1.tmp -d /tmp 2> /dev/null
+								;;
+						esac
+						rm -f /tmp/$1.tmp
+					else
+						opkg_test_install "unzip"
+						echo -e "\n下载 ${YELLOW}$1 $RESET安装脚本 ······" && retry_count=5
+						while [ ! -f /tmp/$1.tmp -a $retry_count != 0 ];do
+							github_download "$1.tmp" "https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/docker.zip"
+							if [ "$?" != 0 ];then
+								rm -f /tmp/$1.tmp && let retry_count--
+								[ $retry_count != 0 ] && echo -e "\n$RED下载失败！$RESET即将尝试重连······（剩余重试次数：$PINK$retry_count$RESET）" && sleep 1
+							else
+								[ "$(wc -c < /tmp/$1.tmp)" -lt 1024 ] && rm -f /tmp/$1.tmp && echo -e "\n$RED下载失败！$RESET" && sleep 1 && main
+							fi
+						done
+						[ ! -f /tmp/$1.tmp ] && echo -e "\n$RED下载失败！$RESET如果没有代理的话建议多尝试几次！" && sleep 1 && main
+						echo -e "\n$GREEN下载成功！$RESET即将解压安装并启动" && rm -f /tmp/$2 && sleep 2
+						[ -f /etc/init.d/mi_docker ] && {
+							echo -e "\n检测到本路由器可安装官方固件版 $YELLOW$1 $RESET，安装最新完整版 $YELLOW$1 $RESET需要禁用官方固件版 $YELLOW$1$RESET ！" && sleep 2
+							echo -e "\n$PINK是否禁用官方版 $1？$RESET" && num=""
 							echo "---------------------------------------------------------"
-							echo -e "1. $GREEN自动检测系统型号$RESET"
-							echo "2. aarch64"
-							[ "$1" = zerotier ] && echo "3. arm-eabi" || echo "3. arm"
-							[ "$1" = zerotier ] && echo "4. arm-eabihf" || echo "4. x86_64"
-							echo "5. mips"
-							echo "6. mipsel"
-							echo "7. mips64"
-							echo "8. mips64el"
+							echo "1. 确认禁用"
 							echo "---------------------------------------------------------"
-							echo "0. 返回上一页"
-							echo -e "\n可以在 $SKYBLUE$urls$RESET 中查找并复制下载地址"
+							echo "0. 取消安装并返回主页面"
 							while [ ! "$num" ];do
 								echo -ne "\n"
-								read -p "请输入对应型号的数字或直接输入以 http 或 ftp 开头的下载地址 > " num
-									case "$num" in
-										1)
-											hardware_type=$(uname -m)
-											[ "$hardware_type" = "aarch64" ] && hardware_type=arm64;;
-										2)	hardware_type=arm64;;
-										3)	hardware_type=arm;;
-										4)	hardware_type=amd64;;
-										5)	hardware_type=mips;;
-										6)	hardware_type=mipsle;;
-										7)	hardware_type=mips64;;
-										8)	hardware_type=mips64le;;
-										0)	sda_install_remove "$1" "$2" "$3" "$4" "$5" "$6" "$7" "return"
-									esac
-								[ "$(echo $num | sed 's/[0-9]//g')" -a "${num:0:4}" != "http" -a "${num:0:3}" != "ftp" -o ! "$num" ] && num="" && continue
-								[ "${num:0:4}" != "http" -a "${num:0:3}" != "ftp" ] && [ "$num" -lt 1 -o "$num" -gt 8 ] && num="" && continue
-								[ "$1" = "qBittorrent" ] && {
-									[ "$hardware_type" = "arm64" ] && hardware_type=aarch64
-									[ "$hardware_type" = "mipsle" ] && hardware_type=mipsel
-									[ "$hardware_type" = "mips64le" ] && hardware_type=mips64el
-									[ "$hardware_type" = "amd64" ] && hardware_type=x86_64
-								}
-								[ "$1" = "AdGuardHome" ] && [ "$hardware_type" = "arm" ] && hardware_type=armv7
-								[ "$1" = "zerotier" ] && {
-									[ "$hardware_type" = "arm64" ] && hardware_type=aarch64
-									[ "$hardware_type" = "mipsle" ] && hardware_type=mipsel
-									[ "$hardware_type" = "mips64le" ] && hardware_type=mips64el
-								}
+								read -p "请输入对应选项的数字 > " num
+								[ "$(echo $num | sed 's/[0-9]//g')" -o ! "$num" ] && num="" && continue
+								[ "$num" -gt 1 ] && num="" && continue
+								[ "$num" -eq 0 ] && rm -f /tmp/$1.tmp && main
 							done
-							[ "$1" = "qBittorrent" -o "$1" = "zerotier" ] && opkg_test_install "unzip"
-							echo -e "\n下载 ${YELLOW}$1 $(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')$RESET ······" && retry_count=5 && eabi="" && softfloat="" && url=""
-							while [ ! -f /tmp/$1.tmp -a $retry_count != 0 ];do
-								[ "$hardware_type" = "arm" ] && eabi="eabi"
-								[ "$1" = "zerotier" ] && [ "$hardware_type" = "amd64" ] && hardware_type=arm && eabi="eabihf"
-								[ "${hardware_type:0:4}" = "mips" ] && softfloat="_softfloat"
-								[ "$1" = "qBittorrent" ] && url="https://github.com/c0re100/qBittorrent-Enhanced-Edition/releases/download/$tag_name/qbittorrent-enhanced-nox_$hardware_type-linux-musl${eabi}_static.zip"
-								[ "$1" = "Alist" ] && url="https://github.com/$5/$6/releases/download/$tag_name/alist-linux-musl$eabi-$hardware_type.tar.gz"
-								[ "$1" = "AdGuardHome" ] && url="https://github.com/$5/$6/releases/download/$tag_name/AdGuardHome_linux_$hardware_type$softfloat.tar.gz"
-								[ "$1" = "zerotier" ] && url="https://github.com/$5/$6/releases/download/$tag_name/zerotier-one-$hardware_type-linux-musl$eabi.zip"
-								if [ "${num:0:4}" = "http" -o "${num:0:3}" = "ftp" ];then
-									url="$num" && echo "" && curl --connect-timeout 3 -#Lko /tmp/$1.tmp "$url"
-								else
-									github_download "$1.tmp" "$url"
-								fi
-								if [ "$?" != 0 ];then
-									rm -f /tmp/$1.tmp && let retry_count--
-									[ $retry_count != 0 ] && echo -e "\n$RED下载失败！$RESET即将尝试重连······（剩余重试次数：$PINK$retry_count$RESET）" && sleep 1
-								else
-									[ "$(wc -c < /tmp/$1.tmp)" -lt 1024 ] && rm -f /tmp/$1.tmp && echo -e "\n$RED下载失败！$RESET没有找到适用于当前系统的文件包，请手动选择型号进行重试！" && sleep 1 && main
-								fi
-							done
-							[ ! -f /tmp/$1.tmp ] && echo -e "\n$RED下载失败！$RESET如果没有代理的话建议多尝试几次！" && sleep 1 && main
-							echo -e "\n$GREEN下载成功！$RESET即将解压安装并启动" && rm -f /tmp/$2 && sleep 2
-							case "$1" in
-								qBittorrent)	unzip -oq /tmp/$1.tmp -d /tmp;;
-								Alist)	tar -zxf /tmp/$1.tmp -C /tmp;;
-								AdGuardHome)	tar -zxf /tmp/$1.tmp -C /tmp && mv -f /tmp/$1 /tmp/$1.dir && mv -f /tmp/$1.dir/$1 /tmp/$1 && rm -rf /tmp/$1.dir;;
-								zerotier)	unzip -P "ikwjqensa%^!" -oq /tmp/$1.tmp -d /tmp 2> /dev/null
-									;;
-							esac
-							rm -f /tmp/$1.tmp
+							uci -q set mi_docker.settings.docker_enable=0 && uci -q commit && /etc/init.d/mi_docker stop &> /dev/null &
+							echo -e "\n$RED正在停止并禁用官方固件版 $YELLOW$1$RESET ······" && sleep 2
+							while [ "$(ps | grep mi_docker | grep -v grep)" ];do sleep 1;done
+							while [ "$(mount | grep cgroup | awk '{print $3}')" ];do umount $(mount | grep cgroup | awk '{print $3}' | tail -1);done
+							[ -f /etc/config/mi_docker ] && mv -f /etc/config/mi_docker /etc/config/mi_docker.backup && log "备份/etc/config/mi_docker文件并改名为mi_docker.backup"
+							[ -f /etc/init.d/mi_docker ] && mv -f /etc/init.d/mi_docker /etc/init.d/mi_docker.backup && log "备份/etc/init.d/mi_docker文件并改名为mi_docker.backup"
+							[ -f /etc/init.d/cgroup_init ] && mv -f /etc/init.d/cgroup_init /etc/init.d/cgroup_init.backup && log "备份/etc/init.d/cgroup_init文件并改名为cgroup_init.backup"
+						}
+						unzip -P "kasjkdnwqe^*#@!!" -oq /tmp/$1.tmp -d /tmp 2> /dev/null && rm -f /tmp/$1.tmp
+						[ -f /etc/init.d/$1 ] && /etc/init.d/$1 stop
+						echo -e "\n$RED安装文件较多、安装时间视网络与外接硬盘性能而定，请耐心等候！$RESET"
+						[ ! "$(grep docker /etc/group)" ] && echo "docker:x:0" >> /etc/group
+						sed -i "s#\$install_dir#${sdadir%/*}#g" /tmp/docker.sh && chmod +x /tmp/docker.sh && /tmp/docker.sh
+						if [ "$?" = 0 ];then
+							while [ ! "$(netstat -lnWp | grep :9000)" ];do sleep 1;done
+							firewalllog "add" "$1" "wan9000rdr1" "tcp" "1" "wan" "9000" "9000"
+							echo -e "\n$YELLOW$1$RESET 端口转发规则 $GREEN已全部更新$RESET，即将重启防火墙 ······" && sleep 2 && /etc/init.d/firewall restart &> /dev/null
+							echo -e "\n${YELLOW}Docker $GREEN安装并启动成功！$RESET" && $autostartfileinit enable && cp -pf $autostartfileinit $sdadir/service_$1
+							echo -e "\n管理页面地址：$SKYBLUE$hostip:9000$RESET"
+							ipv4=$(curl --connect-timeout 3 -sLk v4.ident.me)
+							[ "$ipv4" ] && echo -e "\n外网管理页面地址：$SKYBLUE$ipv4:9000$RESET" && main
 						else
-							opkg_test_install "unzip"
-							echo -e "\n下载 ${YELLOW}$1 $RESET安装脚本 ······" && retry_count=5
-							while [ ! -f /tmp/$1.tmp -a $retry_count != 0 ];do
-								github_download "$1.tmp" "https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/docker.zip"
-								if [ "$?" != 0 ];then
-									rm -f /tmp/$1.tmp && let retry_count--
-									[ $retry_count != 0 ] && echo -e "\n$RED下载失败！$RESET即将尝试重连······（剩余重试次数：$PINK$retry_count$RESET）" && sleep 1
-								else
-									[ "$(wc -c < /tmp/$1.tmp)" -lt 1024 ] && rm -f /tmp/$1.tmp && echo -e "\n$RED下载失败！$RESET" && sleep 1 && main
-								fi
-							done
-							[ ! -f /tmp/$1.tmp ] && echo -e "\n$RED下载失败！$RESET如果没有代理的话建议多尝试几次！" && sleep 1 && main
-							echo -e "\n$GREEN下载成功！$RESET即将解压安装并启动" && rm -f /tmp/$2 && sleep 2
-							[ -f /etc/init.d/mi_docker ] && {
-								echo -e "\n检测到本路由器可安装官方固件版 $YELLOW$1 $RESET，安装最新完整版 $YELLOW$1 $RESET需要禁用官方固件版 $YELLOW$1$RESET ！" && sleep 2
-								echo -e "\n$PINK是否禁用官方版 $1？$RESET" && num=""
-								echo "---------------------------------------------------------"
-								echo "1. 确认禁用"
-								echo "---------------------------------------------------------"
-								echo "0. 取消安装并返回主页面"
-								while [ ! "$num" ];do
-									echo -ne "\n"
-									read -p "请输入对应选项的数字 > " num
-									[ "$(echo $num | sed 's/[0-9]//g')" -o ! "$num" ] && num="" && continue
-									[ "$num" -gt 1 ] && num="" && continue
-									[ "$num" -eq 0 ] && rm -f /tmp/$1.tmp && main
-								done
-								uci -q set mi_docker.settings.docker_enable=0 && uci -q commit && /etc/init.d/mi_docker stop &> /dev/null &
-								echo -e "\n$RED正在停止并禁用官方固件版 $YELLOW$1$RESET ······" && sleep 2
-								while [ "$(ps | grep mi_docker | grep -v grep)" ];do sleep 1;done
-								while [ "$(mount | grep cgroup | awk '{print $3}')" ];do umount $(mount | grep cgroup | awk '{print $3}' | tail -1);done
-								[ -f /etc/config/mi_docker ] && mv -f /etc/config/mi_docker /etc/config/mi_docker.backup && log "备份/etc/config/mi_docker文件并改名为mi_docker.backup"
-								[ -f /etc/init.d/mi_docker ] && mv -f /etc/init.d/mi_docker /etc/init.d/mi_docker.backup && log "备份/etc/init.d/mi_docker文件并改名为mi_docker.backup"
-								[ -f /etc/init.d/cgroup_init ] && mv -f /etc/init.d/cgroup_init /etc/init.d/cgroup_init.backup && log "备份/etc/init.d/cgroup_init文件并改名为cgroup_init.backup"
-							}
-							unzip -P "kasjkdnwqe^*#@!!" -oq /tmp/$1.tmp -d /tmp 2> /dev/null && rm -f /tmp/$1.tmp
-							[ -f /etc/init.d/$1 ] && /etc/init.d/$1 stop
-							echo -e "\n$RED安装文件较多、安装时间视网络与外接硬盘性能而定，请耐心等候！$RESET"
-							[ ! "$(grep docker /etc/group)" ] && echo "docker:x:0" >> /etc/group
-							sed -i "s#\$install_dir#${sdadir%/*}#g" /tmp/docker.sh && chmod +x /tmp/docker.sh && /tmp/docker.sh
-							if [ "$?" = 0 ];then
-								while [ ! "$(netstat -lnWp | grep :9000)" ];do sleep 1;done
-								firewalllog "add" "$1" "wan9000rdr1" "tcp" "1" "wan" "9000" "9000"
-								echo -e "\n$YELLOW$1$RESET 端口转发规则 $GREEN已全部更新$RESET，即将重启防火墙 ······" && sleep 2 && /etc/init.d/firewall restart &> /dev/null
-								echo -e "\n${YELLOW}Docker $GREEN安装并启动成功！$RESET" && $autostartfileinit enable && cp -pf $autostartfileinit $sdadir/service_$1
-								echo -e "\n管理页面地址：$SKYBLUE$hostip:9000$RESET"
-								ipv4=$(curl --connect-timeout 3 -sLk v4.ident.me)
-								[ "$ipv4" ] && echo -e "\n外网管理页面地址：$SKYBLUE$ipv4:9000$RESET" && main
-							else
-								echo -e "\n$RED下载文件出错！请重试！$RESET" && sleep 2 && main
-							fi
+							echo -e "\n$RED下载文件出错！请重试！$RESET" && sleep 2 && main
 						fi
-					}
-				else
-					echo test
-				fi
+					fi
+				}
 			}
 		}
 		if [ "$upxneeded" = 1 ];then
