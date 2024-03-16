@@ -23,7 +23,7 @@ opkg_test_install(){
 		[ "$1" = "vsftpd" ] && rm -f /etc/vsftpd.conf && opkg remove vsftpd &> /dev/null
 		[ "$1" = "transmission" ] && rm -rf /etc/config/transmission /usr/share/transmission/ && opkg remove transmission-web transmission-daemon-openssl transmission-daemon-mbedtls libnatpmp libminiupnpc &> /dev/null
 		[ "$1" = "wakeonlan" ] && rm -rf /usr/share/perl /usr/lib/perl5/ && opkg remove wakeonlan perlbase-net perlbase-time perlbase-dynaloader perlbase-filehandle perlbase-class perlbase-getopt perlbase-io perlbase-socket perlbase-selectsaver perlbase-symbol perlbase-scalar perlbase-posix perlbase-tie perlbase-list perlbase-fcntl perlbase-xsloader perlbase-errno perlbase-bytes perlbase-base perlbase-essential perlbase-config perl &> /dev/null
-		[ "$1" = "zerotier" ] && rm -f /etc/config/zerotier && opkg remove zerotier &> /dev/null
+		[ "$1" = "zerotier" ] && rm -f /etc/config/zerotier && opkg remove zerotier libnatpmp libminiupnpc &> /dev/null
 		[ ! -f /tmp/opkg_updated ] && {
 			opkg update
 			if [ "$?" != 0 ];then
@@ -310,7 +310,7 @@ opkg_test_install(){
 	}
 	[ "$1" = "zerotier" ] && {
 		echo -e "\n即将检测$YELLOW $1$RESET 是否能够直接运行······" && sleep 2
-		[ ! "$(zerotier-one -v 2> /dev/null)" ] && rm -f /etc/config/zerotier && opkg remove zerotier &> /dev/null && return 1
+		[ ! "$(zerotier-one -v 2> /dev/null)" ] && rm -f /etc/config/zerotier && opkg remove zerotier libnatpmp libminiupnpc &> /dev/null && return 1
 		skipdownload=1
 	}
 	return 0
@@ -536,7 +536,7 @@ sda_install_remove(){
 			[ "$(grep domainblacklist /etc/crontabs/root 2> /dev/null)" ] && sed -i '/domainblacklist/d' /etc/crontabs/root && /etc/init.d/cron restart &> /dev/null && log "删除/etc/crontabs/root文件中的定时任务domainblacklist"
 		}
 		[ "$1" = "wakeonlan" ] && rm -rf /usr/share/perl /usr/lib/perl5/ && opkg remove wakeonlan perlbase-net perlbase-time perlbase-dynaloader perlbase-filehandle perlbase-class perlbase-getopt perlbase-io perlbase-socket perlbase-selectsaver perlbase-symbol perlbase-scalar perlbase-posix perlbase-tie perlbase-list perlbase-fcntl perlbase-xsloader perlbase-errno perlbase-bytes perlbase-base perlbase-essential perlbase-config perl &> /dev/null && sed -i '/网络唤醒/d' /etc/crontabs/root && /etc/init.d/cron restart &> /dev/null
-		[ "$1" = "zerotier" ] && rm -f /etc/config/zerotier && opkg remove zerotier &> /dev/null
+		[ "$1" = "zerotier" ] && rm -f /etc/config/zerotier && opkg remove zerotier libnatpmp libminiupnpc &> /dev/null
 		[ "$1" = "docker" ] && {
 			rm -rf /lib/libblkid-tiny.so /lib/libubox.so.20230523 /lib/libubus.so.20230605 /lib/libblobmsg_json.so.20230523 /sbin/block /usr/lib/libjson-c.so.5 /usr/lib/libjson-c.so.5.2.0 /lib/upgrade/keep.d/block-mount  /usr/bin/containerd /usr/bin//usr/bin/containerd-shim /usr/bin/containerd-shim-runc-v2 /usr/bin/ctr /usr/bin/docker /usr/bin/docker-init /usr/bin/docker-proxy /usr/bin/dockerd /usr/bin/runc /usr/bin/swapoff /usr/bin/swapon /opt/containerd/ /run/blkid/ /run/containerd/ /run/docker/
 			[ -f /etc/config/mi_docker.backup ] && mv -f /etc/config/mi_docker.backup /etc/config/mi_docker && log "恢复/etc/config/mi_docker.backup文件并改名为mi_docker"
