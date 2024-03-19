@@ -1,5 +1,5 @@
-version=v1.0.7c
-RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=false
+version=v1.0.7d
+RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=true
 hardware_release=$(cat /etc/openwrt_release 2> /dev/null | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_arch=$(cat /etc/openwrt_release 2> /dev/null | grep ARCH | awk -F "'" '{print $2}')
 hostip=$(uci get network.lan.ipaddr 2> /dev/null)
@@ -15,6 +15,7 @@ log(){
 	echo "[ $(date '+%F %T') ] $1" >> ${0%/*}/XiaomiSimpleInstallBox.log
 }
 opkg_test_install(){
+	[ "$1" = "unzip" ] && [ "$(which unzip)" ] && return 0
 	[ ! "$(opkg list-installed | grep $1 2> /dev/null)" ] && {
 		[ ! "$(grep opkg.update /etc/profile 2> /dev/null)" ] && echo -e "\n#小米简易安装插件脚本避免重复运行opkg update命令\nrm -f /tmp/opkg_updated" >> /etc/profile
 		echo -e "\n本次操作需要使用到 $YELLOW$1$RESET" && sleep 1
@@ -34,7 +35,7 @@ opkg_test_install(){
 				echo "src/gz openwrt_routing http://downloads.openwrt.org/releases/packages-$hardware_release/$hardware_arch/routing" >> /etc/opkg/distfeeds.conf && log "新建文件/etc/opkg/distfeeds.conf"
 				opkg update
 				[ "$?" = 0 ] && touch /tmp/opkg_updated || {
-					echo -e "\n更新源$RED连接失败$RESET！请检查 $BLUE/etc/opkg/distfeeds.conf$RESET 中的地址是否正确或 ${SKYBLUE}/overlay$RESET 空间是否足够后重试！"
+					echo -e "\n更新源$RED连接失败$RESET！请检查 $BLUE/etc/opkg/distfeeds.conf$RESET 中的地址是否正确并有效！" && sleep 2
 					[ "$1" = "zerotier" ] && return 1 || main
 				}
 			else
@@ -43,10 +44,24 @@ opkg_test_install(){
 		}
 		opkg install $1
 		[ "$?" != 0 ] && {
-			echo -e "\n安装 ${YELLOW}$1$RED 失败！$RESET请检查 $BLUE/etc/opkg/distfeeds.conf$RESET 中的地址是否正确并有效！"
-			[ "$1" = "zerotier" ] && return 1 || main
+			echo -e "\n安装 ${YELLOW}$1$RED 失败！$RESET请检查 $BLUE/etc/opkg/distfeeds.conf$RESET 中的地址是否正确或 ${SKYBLUE}/overlay$RESET 空间是否足够后重试！" && sleep 2
+			[ "$1" = "unzip" ] && {
+				echo -e "\n即将尝试下载 $YELLOW$1$RESET 到 $BLUE/data/$1$RESET 文件夹中使用 ······ \c" && sleep 2
+				curl -sko /tmp/$1.ipk https://downloads.openwrt.org/releases/packages-$hardware_release/$hardware_arch/packages/$1_$(opkg list $1 | awk '{print $3}' | head -1)_$hardware_arch.ipk
+				if [ "$?" = 0 ];then
+					[ $(wc -c < /tmp/$1.ipk) -lt 1024 ] && rm -f /tmp/$1.ipk && echo -e "$RED下载失败！$RESET" && sleep 2 && main
+					echo -e "$GREEN下载成功！$RESET" && sleep 2
+					mkdir -p /data/$1 /tmp/$1
+					tar -zxf /tmp/$1.ipk ./data.tar.gz -C /tmp/$1
+					tar -zxf /tmp/$1/data.tar.gz ./usr/bin/$1 -C /tmp/$1
+					mv -f /tmp/$1/usr/bin/$1 /data/$1/$1 && rm -rf /tmp/$1 /tmp/$1.ipk && ln -sf /data/$1/$1 /usr/bin/$1
+				else
+					echo -e "$RED下载失败！$RESET" && sleep 2 && main
+				fi
+			}
+			[ "$1" = "zerotier" ] && return 1 || [ "$1" != "unzip" ] && main
 		}
-		echo -e "\n$GREEN安装 $YELLOW$1 $GREEN成功$RESET" && sleep 2 && [ "$1" = "vsftpd" ] && newuser=1
+		echo -e "\n$GREEN安装 $YELLOW$1$GREEN 成功$RESET" && sleep 2 && [ "$1" = "vsftpd" ] && newuser=1
 	}
 	[ "$1" = "vsftpd" ] && {
 		[ ! "$newuser" ] && {
@@ -1100,7 +1115,7 @@ main(){
 		echo -e "\n$YELLOW=========================================================$RESET" &&
 		echo -e "\n$PINK\t\t[[  这里以下是主页面  ]]$RESET"
 		echo -e "\n$GREEN=========================================================$RESET"
-		echo -e "\n欢迎使用$YELLOW小米路由器$GREEN简易安装插件脚本 $PINK$version$RESET ，觉得好用希望能够$RED$BLINK打赏支持~！$RESET" && 
+		echo -e "\n欢迎使用$YELLOW小米路由器$GREEN简易安装插件脚本 $PINK$version$RESET ，觉得好用希望能够$RED$BLINK打赏支持~！$RESET"
 		echo -e "\n$PINK请输入你的选项：$RESET"
 		echo "---------------------------------------------------------"
 		echo -e "1. $RED更新或下载$RESET并$GREEN启动$RESET最新版${YELLOW}qbittorrent增强版$RESET（BT & 磁链下载神器）"
