@@ -1,4 +1,4 @@
-version=v1.0.7d
+version=v1.0.7e
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=true
 hardware_release=$(cat /etc/openwrt_release 2> /dev/null | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_arch=$(cat /etc/openwrt_release 2> /dev/null | grep ARCH | awk -F "'" '{print $2}')
@@ -9,7 +9,6 @@ MIRRORS="
 https://gh.ddlc.top/
 https://hub.gitmirror.com/
 https://mirror.ghproxy.com/
-https://ghps.cc/
 "
 log(){
 	echo "[ $(date '+%F %T') ] $1" >> ${0%/*}/XiaomiSimpleInstallBox.log
@@ -17,7 +16,6 @@ log(){
 opkg_test_install(){
 	[ "$1" = "unzip" ] && [ "$(which unzip)" ] && return 0
 	[ ! "$(opkg list-installed | grep $1 2> /dev/null)" ] && {
-		[ ! "$(grep opkg.update /etc/profile 2> /dev/null)" ] && echo -e "\n#小米简易安装插件脚本避免重复运行opkg update命令\nrm -f /tmp/opkg_updated" >> /etc/profile
 		echo -e "\n本次操作需要使用到 $YELLOW$1$RESET" && sleep 1
 		echo -e "\n本机还$RED没有安装 $YELLOW$1$RESET ！即将通过 opkg 下载安装\n" && sleep 1
 		[ "$1" = "aria2" ] && rm -rf /www/ariang && opkg remove ariang aria2 &> /dev/null
@@ -25,22 +23,20 @@ opkg_test_install(){
 		[ "$1" = "transmission" ] && rm -rf /etc/config/transmission /usr/share/transmission/ && opkg remove transmission-web transmission-daemon-openssl transmission-daemon-mbedtls libnatpmp libminiupnpc &> /dev/null
 		[ "$1" = "wakeonlan" ] && rm -rf /usr/share/perl /usr/lib/perl5/ && opkg remove wakeonlan perlbase-net perlbase-time perlbase-dynaloader perlbase-filehandle perlbase-class perlbase-getopt perlbase-io perlbase-socket perlbase-selectsaver perlbase-symbol perlbase-scalar perlbase-posix perlbase-tie perlbase-list perlbase-fcntl perlbase-xsloader perlbase-errno perlbase-bytes perlbase-base perlbase-essential perlbase-config perl &> /dev/null
 		[ "$1" = "zerotier" ] && rm -f /etc/config/zerotier && opkg remove zerotier libnatpmp libminiupnpc &> /dev/null
-		[ ! -f /tmp/opkg_updated ] && {
+		[ ! -f /tmp/opkg-lists/openwrt_packages.sig ] && {
 			opkg update
-			if [ "$?" != 0 ];then
-			[ ! -f /etc/opkg/distfeeds.conf.backup ] && mv /etc/opkg/distfeeds.conf /etc/opkg/distfeeds.conf.backup && log "文件/etc/opkg/distfeeds.conf改名为distfeeds.conf.backup"
+			[ "$?" != 0 ] && {
+				[ ! -f /etc/opkg/distfeeds.conf.backup ] && mv /etc/opkg/distfeeds.conf /etc/opkg/distfeeds.conf.backup && log "文件/etc/opkg/distfeeds.conf改名为distfeeds.conf.backup"
 				echo -e "\n更新源$RED连接失败$RESET，将尝试根据获取的机型信息 $PINK$hardware_release-$hardware_arch$RESET 进行重试\n" && sleep 2
 				echo "src/gz openwrt_base http://downloads.openwrt.org/releases/packages-$hardware_release/$hardware_arch/base" > /etc/opkg/distfeeds.conf
 				echo "src/gz openwrt_packages http://downloads.openwrt.org/releases/packages-$hardware_release/$hardware_arch/packages" >> /etc/opkg/distfeeds.conf
 				echo "src/gz openwrt_routing http://downloads.openwrt.org/releases/packages-$hardware_release/$hardware_arch/routing" >> /etc/opkg/distfeeds.conf && log "新建文件/etc/opkg/distfeeds.conf"
 				opkg update
-				[ "$?" = 0 ] && touch /tmp/opkg_updated || {
+				[ "$?" != 0 ] && {
 					echo -e "\n更新源$RED连接失败$RESET！请检查 $BLUE/etc/opkg/distfeeds.conf$RESET 中的地址是否正确并有效！" && sleep 2
 					[ "$1" = "zerotier" ] && return 1 || main
 				}
-			else
-				touch /tmp/opkg_updated
-			fi
+			}
 		}
 		opkg install $1
 		[ "$?" != 0 ] && {
@@ -457,7 +453,7 @@ sda_install_remove(){
 				sdadir=$name
 				[ -L "$sdadir" -a "$(echo $name | grep -v '\.d')" ] && {
 					tmpdir="/tmp/XiaomiSimpleInstallBox"
-					[ "$1" = "zerotier" ] && skipdownload=1
+					[ "$1" = "zerotier" ] && [ "$(file $sdadir | awk '{print $5}' | awk -F / '{print $2}')" = "usr" ] && skipdownload=1
 				}
 				break
 			}
@@ -574,7 +570,7 @@ sda_install_remove(){
 		[ "$(find /usr -name openssl)" ] && opkg_test_install "transmission-daemon-openssl" || opkg_test_install "transmission-daemon-mbedtls"
 	}
 	if [ ! "$(echo $1 | grep -oE 'aria2|transmission')" ];then
-		[ "$1" = "zerotier" ] && [ -L "$sdadir/$2" ] && [ "$(file $sdadir/$2 | awk '{print $5}' | grep -oE '^/tmp/|^/var/')" ] && [ ! "$(cat $sdadir/networks.d/$(ls $sdadir/networks.d/ 2> /dev/null | grep -v local) 2> /dev/null)" -o ! -f /etc/init.d/Donwnload$1 ] && {
+		[ "$1" = "zerotier" ] && [ -L "$sdadir/$2" ] && [ "$(file $sdadir/$2 | awk '{print $5}' | grep -oE '^/tmp/|^/var/')" ] && [ "$(wc -c 2> /dev/null < $sdadir/networks.d/$(ls $sdadir/networks.d/ 2> /dev/null | grep -v local))" = "1" -o ! -d $sdadir/networks.d -o ! -f /etc/init.d/Download$1 ] && {
 			echo -e "\n${YELLOW}ZeroTier-one $RED在使用临时目录时必须在首次下载安装时设置好网络！$RESET"
 			sda_install_remove "$1" "$2" "del"
 		}
@@ -897,20 +893,20 @@ sda_install_remove(){
 		while [ ! "$(pidof $2)" -a "$runtimecount" -lt 5 ];do let runtimecount++;sleep 1;done
 		if [ "$(pidof $2)" ];then
 			echo -e "#!/bin/sh /etc/rc.common\n\nSTART=95\n\nstart() {" > $autostartfileinit
-			[ "$tmpdir" -a ! "$skipdownload" ] && echo -e "#!/bin/sh /etc/rc.common\n\nSTART=95\n\nstart() {\n\tcat > /tmp/download$1file.sh <<EOF\n[ ! -d /tmp/XiaomiSimpleInstallBox ] && mkdir -p /tmp/XiaomiSimpleInstallBox\nwhile [ ! -f /tmp/$1.tmp ];do curl --connect-timeout 3 -sLko /tmp/$1.tmp \"$url\";[ \"\$?\" != 0 ] && rm -f /tmp/$1.tmp;done" > $downloadfileinit
+			[ "$tmpdir" -a ! "$skipdownload" ] && echo -e "#!/bin/sh /etc/rc.common\n\nSTART=95\n\nstart() {\n\tcat > /tmp/download$1file.sh <<EOF\n[ ! -d /tmp/XiaomiSimpleInstallBox ] && mkdir -p /tmp/XiaomiSimpleInstallBox\ntrycount=0;while [ \\\$trycount -lt 3 -a ! -f /tmp/$1.tmp ];do curl --connect-timeout 3 -sLko /tmp/$1.tmp \"$url\";[ \\\$? = 0 ] && [ \\\$(wc -c < /tmp/$1.tmp) -lt 1024 ] && rm -f /tmp/$1.tmp;[ ! -f /tmp/$1.tmp ] && let trycount++;done\n[ -f /tmp/$1.tmp ] && {" > $downloadfileinit
 			[ "$1" = "qBittorrent" ] && {
 				while [ "$(pidof $2)" ];do killpid $(pidof $2 | awk '{print $1}');done
 				sessionPort=$(cat $sdadir/qBittorrent_files/config/qBittorrent.conf | grep -F 'Session\Port' | sed 's/.*=//')
 				firewalllog "add" "$1" "wan${sessionPort}rdr3" "tcpudp" "1" "wan" "$sessionPort" "$sessionPort"
 				firewalllog "add" "$1" "wan${newdefineport}rdr1" "tcp" "1" "wan" "$newdefineport" "$newdefineport"
 				echo -e "\t$sdadir/$2 --webui-port=$newdefineport --profile=$sdadir --configuration=files -d" >> $autostartfileinit
-				[ "$tmpdir" -a ! "$skipdownload" ] && echo -e "unzip -oq /tmp/$1.tmp -d /tmp && mv -f /tmp/$2 /tmp/XiaomiSimpleInstallBox/$2" >> $downloadfileinit
+				[ "$tmpdir" -a ! "$skipdownload" ] && echo -e "\tunzip -oq /tmp/$1.tmp -d /tmp && mv -f /tmp/$2 /tmp/XiaomiSimpleInstallBox/$2" >> $downloadfileinit
 			}
 			[ "$1" = "Alist" ] && {
 				[ -f $sdadir/.unadmin ] && sleep 5 && $sdadir/$2 admin set 12345678 --data $sdadir/data &> /dev/null && rm -f $sdadir/.unadmin
 				firewalllog "add" "$1" "wan${newdefineport}rdr1" "tcp" "1" "wan" "$newdefineport" "$newdefineport"
 				echo -e "\trm -f $sdadir/daemon/pid $tmpdir/daemon/pid\n\t$sdadir/$2 start --data $sdadir/data" >> $autostartfileinit
-				[ "$tmpdir" -a ! "$skipdownload" ] && echo -e "tar -zxf /tmp/$1.tmp -C /tmp && mv -f /tmp/$2 /tmp/XiaomiSimpleInstallBox/$2" >> $downloadfileinit
+				[ "$tmpdir" -a ! "$skipdownload" ] && echo -e "\ttar -zxf /tmp/$1.tmp -C /tmp && mv -f /tmp/$2 /tmp/XiaomiSimpleInstallBox/$2" >> $downloadfileinit
 			}
 			[ "$1" = "AdGuardHome" ] && {
 				while [ "$(pidof $2)" ];do killpid $(pidof $2 | awk '{print $1}');done
@@ -921,13 +917,13 @@ sda_install_remove(){
 					echo -e "\tip6tables -t nat -I PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports ${adguardhomednsport}\n\tip6tables -t nat -I PREROUTING -p udp --dport 53 -j REDIRECT --to-ports $adguardhomednsport" >> $autostartfileinit
 				}
 				[ "$tmpdir" -a ! "$skipdownload" ] && {
-					echo -e "tar -zxf /tmp/$1.tmp -C /tmp && mv -f /tmp/$1 /tmp/$1.dir && mv -f /tmp/$1.dir/$2 /tmp/XiaomiSimpleInstallBox/$2 && rm -rf /tmp/$1.dir" >> $downloadfileinit
+					echo -e "\ttar -zxf /tmp/$1.tmp -C /tmp && mv -f /tmp/$1 /tmp/$1.dir && mv -f /tmp/$1.dir/$2 /tmp/XiaomiSimpleInstallBox/$2 && rm -rf /tmp/$1.dir" >> $downloadfileinit
 					if [ "$adguardhomednsport" = 53 ];then
 						sed -i '7a mv -f /etc/config/dhcp.backup /etc/config/dhcp && /etc/init.d/dnsmasq restart &> /dev/null' $downloadfileinit
-						echo -e "cp -f /etc/config/dhcp /etc/config/dhcp.backup\nuci -q set dhcp.@dnsmasq[0].port=0 && uci -q commit && /etc/init.d/dnsmasq restart &> /dev/null" >> $downloadfileinit
+						echo -e "\tcp -f /etc/config/dhcp /etc/config/dhcp.backup\nuci -q set dhcp.@dnsmasq[0].port=0 && uci -q commit && /etc/init.d/dnsmasq restart &> /dev/null" >> $downloadfileinit
 					else
 						sed -i "7a uci -q del firewall.lan53rdr3 && uci -q commit && /etc/init.d/firewall restart" $downloadfileinit
-						echo "uci -q set firewall.lan53rdr3=redirect && uci -q set firewall.lan53rdr3.name=$1-lan53rdr3 && uci -q set firewall.lan53rdr3.proto=tcpudp && uci -q set firewall.lan53rdr3.ftype=1 && uci -q set firewall.lan53rdr3.dest_ip=\$(uci -q get network.lan.ipaddr) && uci -q set firewall.lan53rdr3.src=lan && uci -q set firewall.lan53rdr3.dest=lan && uci -q set firewall.lan53rdr3.target=DNAT && uci -q set firewall.lan53rdr3.src_dport=53 && uci -q set firewall.lan53rdr3.dest_port=$adguardhomednsport && uci -q commit && /etc/init.d/firewall restart" >> $downloadfileinit
+						echo "\tuci -q set firewall.lan53rdr3=redirect && uci -q set firewall.lan53rdr3.name=$1-lan53rdr3 && uci -q set firewall.lan53rdr3.proto=tcpudp && uci -q set firewall.lan53rdr3.ftype=1 && uci -q set firewall.lan53rdr3.dest_ip=\$(uci -q get network.lan.ipaddr) && uci -q set firewall.lan53rdr3.src=lan && uci -q set firewall.lan53rdr3.dest=lan && uci -q set firewall.lan53rdr3.target=DNAT && uci -q set firewall.lan53rdr3.src_dport=53 && uci -q set firewall.lan53rdr3.dest_port=$adguardhomednsport && uci -q commit && /etc/init.d/firewall restart" >> $downloadfileinit
 					fi
 				}
 			}
@@ -963,7 +959,7 @@ sda_install_remove(){
 				}
 				while [ ! "$(ifconfig | awk '{print $1}' | grep ^zt)" ];do sleep 1;done
 				echo -e "\t$sdadir/$2 -d $sdadir -p$newdefineport\n\tiptables -I FORWARD -o $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口出口\" -j ACCEPT 2> /dev/null\n\tiptables -I FORWARD -i $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口入口\" -j ACCEPT 2> /dev/null\n\tiptables -t nat -I POSTROUTING -o $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口出口钳制\" -j MASQUERADE 2> /dev/null" >> $autostartfileinit
-				[ "$tmpdir" -a ! "$skipdownload" ] && echo -e "unzip -P \"ikwjqensa%^!\" -oq /tmp/$1.tmp -d /tmp 2> /dev/null && mv -f /tmp/$2 /tmp/XiaomiSimpleInstallBox/$2" >> $downloadfileinit
+				[ "$tmpdir" -a ! "$skipdownload" ] && echo -e "\tunzip -P \"ikwjqensa%^!\" -oq /tmp/$1.tmp -d /tmp 2> /dev/null && mv -f /tmp/$2 /tmp/XiaomiSimpleInstallBox/$2" >> $downloadfileinit
 			}
 			echo -e "}\n\nstop() {\n\tservice_stop $sdadir/$2" >> $autostartfileinit
 			[ "$1" = "AdGuardHome" ] && [ "$adguardhomednsport" != 53 ] && echo -e "\tip6tables -t nat -D PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports ${adguardhomednsport}\n\tip6tables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-ports $adguardhomednsport" >> $autostartfileinit
@@ -976,7 +972,7 @@ sda_install_remove(){
 			echo "}" >> $autostartfileinit && chmod 755 $autostartfileinit && log "新建自启动文件$autostartfileinit"
 			ln -sf $autostartfileinit $autostartfilerc && log "新建自启动链接文件$autostartfilerc并链接到$autostartfileinit" && chmod 755 $autostartfilerc && $autostartfileinit start &> /dev/null && cp -pf $autostartfileinit $sdadir/service_$1
 			[ "$tmpdir" -a ! "$skipdownload" ] && {
-				echo -e "rm -f /tmp/$1.tmp\nchmod 755 /tmp/XiaomiSimpleInstallBox/$2\netc/init.d/$1 restart &> /dev/null\nrm -f /tmp/download$1file.sh\nEOF\n\tchmod 755 /tmp/download$1file.sh\n\t/tmp/download$1file.sh &\n}" >> $downloadfileinit && chmod 755 $downloadfileinit && log "新建自启动文件$downloadfileinit"
+				echo -e "\trm -f /tmp/$1.tmp\n\tchmod 755 /tmp/XiaomiSimpleInstallBox/$2\n\t$sdadir/service_$1 start &> /dev/null\n}\nrm -f /tmp/download$1file.sh\nEOF\n\tchmod 755 /tmp/download$1file.sh\n\t/tmp/download$1file.sh &\n}" >> $downloadfileinit && chmod 755 $downloadfileinit && log "新建自启动文件$downloadfileinit"
 				ln -sf $downloadfileinit $downloadfilerc && log "新建自启动链接文件$downloadfilerc并链接到$downloadfileinit" && chmod 755 $downloadfilerc && cp -pf $downloadfileinit $sdadir/service_Download$1
 			}
 			if [ "$1" != "zerotier" ];then
