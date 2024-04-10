@@ -1,5 +1,6 @@
-version=v1.0.7e
+version=v1.0.7f
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=true
+export PATH=/data/unzip:$PATH
 hardware_release=$(cat /etc/openwrt_release 2> /dev/null | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_arch=$(cat /etc/openwrt_release 2> /dev/null | grep ARCH | awk -F "'" '{print $2}')
 hostip=$(uci get network.lan.ipaddr 2> /dev/null)
@@ -50,7 +51,7 @@ opkg_test_install(){
 					mkdir -p /data/$1 /tmp/$1
 					tar -zxf /tmp/$1.ipk ./data.tar.gz -C /tmp/$1
 					tar -zxf /tmp/$1/data.tar.gz ./usr/bin/$1 -C /tmp/$1
-					mv -f /tmp/$1/usr/bin/$1 /data/$1/$1 && rm -rf /tmp/$1 /tmp/$1.ipk && ln -sf /data/$1/$1 /usr/bin/$1
+					mv -f /tmp/$1/usr/bin/$1 /data/$1/$1 && rm -rf /tmp/$1 /tmp/$1.ipk
 				else
 					echo -e "$RED下载失败！$RESET" && sleep 2 && main
 				fi
@@ -900,7 +901,7 @@ sda_install_remove(){
 				firewalllog "add" "$1" "wan${sessionPort}rdr3" "tcpudp" "1" "wan" "$sessionPort" "$sessionPort"
 				firewalllog "add" "$1" "wan${newdefineport}rdr1" "tcp" "1" "wan" "$newdefineport" "$newdefineport"
 				echo -e "\t$sdadir/$2 --webui-port=$newdefineport --profile=$sdadir --configuration=files -d" >> $autostartfileinit
-				[ "$tmpdir" -a ! "$skipdownload" ] && echo -e "\tunzip -oq /tmp/$1.tmp -d /tmp && mv -f /tmp/$2 /tmp/XiaomiSimpleInstallBox/$2" >> $downloadfileinit
+				[ "$tmpdir" -a ! "$skipdownload" ] && echo -e "\texport PATH=/data/unzip:\$PATH && unzip -oq /tmp/$1.tmp -d /tmp && mv -f /tmp/$2 /tmp/XiaomiSimpleInstallBox/$2" >> $downloadfileinit
 			}
 			[ "$1" = "Alist" ] && {
 				[ -f $sdadir/.unadmin ] && sleep 5 && $sdadir/$2 admin set 12345678 --data $sdadir/data &> /dev/null && rm -f $sdadir/.unadmin
@@ -959,7 +960,7 @@ sda_install_remove(){
 				}
 				while [ ! "$(ifconfig | awk '{print $1}' | grep ^zt)" ];do sleep 1;done
 				echo -e "\t$sdadir/$2 -d $sdadir -p$newdefineport\n\tiptables -I FORWARD -o $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口出口\" -j ACCEPT 2> /dev/null\n\tiptables -I FORWARD -i $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口入口\" -j ACCEPT 2> /dev/null\n\tiptables -t nat -I POSTROUTING -o $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口出口钳制\" -j MASQUERADE 2> /dev/null" >> $autostartfileinit
-				[ "$tmpdir" -a ! "$skipdownload" ] && echo -e "\tunzip -P \"ikwjqensa%^!\" -oq /tmp/$1.tmp -d /tmp 2> /dev/null && mv -f /tmp/$2 /tmp/XiaomiSimpleInstallBox/$2" >> $downloadfileinit
+				[ "$tmpdir" -a ! "$skipdownload" ] && echo -e "\texport PATH=/data/unzip:\$PATH && unzip -P \"ikwjqensa%^!\" -oq /tmp/$1.tmp -d /tmp 2> /dev/null && mv -f /tmp/$2 /tmp/XiaomiSimpleInstallBox/$2" >> $downloadfileinit
 			}
 			echo -e "}\n\nstop() {\n\tservice_stop $sdadir/$2" >> $autostartfileinit
 			[ "$1" = "AdGuardHome" ] && [ "$adguardhomednsport" != 53 ] && echo -e "\tip6tables -t nat -D PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports ${adguardhomednsport}\n\tip6tables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-ports $adguardhomednsport" >> $autostartfileinit
