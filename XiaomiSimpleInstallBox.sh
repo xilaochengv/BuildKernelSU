@@ -7,9 +7,9 @@ hostip=$(uci get network.lan.ipaddr 2> /dev/null)
 wanifname=$(uci get network.wan.ifname 2> /dev/null)
 [ -d /usr/share/xiaoqiang -a "$(uname -m)" = "aarch64" ] && miAARCH64=true
 MIRRORS="
-https://gh.ddlc.top/
-https://hub.gitmirror.com/
 https://mirror.ghproxy.com/
+https://hub.gitmirror.com/
+https://gh.ddlc.top/
 "
 log(){
 	echo "[ $(date '+%F %T') ] $1" >> ${0%/*}/XiaomiSimpleInstallBox.log
