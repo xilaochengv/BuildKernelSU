@@ -805,7 +805,7 @@ sda_install_remove(){
 				definetrackerport=$(cat $sdadir/qBittorrent_files/config/qBittorrent.conf | grep -F 'Advanced\trackerPort' | sed 's/.*=//')
 				newtrackerport=$definetrackerport
 				while [ "$(netstat -lnWp | grep tcp | grep ":$newdefineport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdefineport++;sleep 1;done
-				while [ "$(netstat -lnWp | grep tcp | grep ":$newtrackerport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newtrackerport++;sleep 1;done
+				while [ "$(netstat -lnWp | grep ":$newtrackerport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newtrackerport++;sleep 1;done
 				sed -i "s/=$defineport$/=$newdefineport/" $sdadir/qBittorrent_files/config/qBittorrent.conf
 				sed -i "s/=$definetrackerport$/=$newtrackerport/" $sdadir/qBittorrent_files/config/qBittorrent.conf
 			else
