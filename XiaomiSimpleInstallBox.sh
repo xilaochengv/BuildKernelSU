@@ -1,4 +1,4 @@
-version=v1.0.7f
+version=v1.0.7g
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=true
 export PATH=/data/unzip:$PATH
 hardware_release=$(cat /etc/openwrt_release 2> /dev/null | grep RELEASE | grep -oE [.0-9]{1,10})
@@ -700,6 +700,11 @@ sda_install_remove(){
 						esac
 						rm -f /tmp/$1.tmp
 					else
+						port=$(netstat -lnWp | grep -E ':8000 |:9000 |:9443 ' | awk '{print $4}' | grep -oE [0-9.]{1,5} | head -1)
+						process=$(netstat -lnWp | grep -E ':8000 |:9000 |:9443 ' | awk '{print $NF}' | sed 's/.*\///' | head -1)
+						[ "$port" ] && {
+							echo -e "\n$RED检测到 $PINK$port $RED端口已被 $YELLOW$process $RED占用！无法安装！$RESET" && sleep 2 && main
+						}
 						opkg_test_install "unzip"
 						echo -e "\n下载 ${YELLOW}$1 $RESET安装脚本 ······" && retry_count=5
 						while [ ! -f /tmp/$1.tmp -a $retry_count != 0 ];do
