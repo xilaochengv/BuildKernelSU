@@ -802,12 +802,17 @@ sda_install_remove(){
 			if [ -f $sdadir/qBittorrent_files/config/qBittorrent.conf ];then
 				defineport=$(cat $sdadir/qBittorrent_files/config/qBittorrent.conf | grep -F 'WebUI\Port' | sed 's/.*=//')
 				newdefineport=$defineport
+				definetrackerport=$(cat $sdadir/qBittorrent_files/config/qBittorrent.conf | grep -F 'Advanced\trackerPort' | sed 's/.*=//')
+				newtrackerport=$definetrackerport
 				while [ "$(netstat -lnWp | grep tcp | grep ":$newdefineport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdefineport++;sleep 1;done
+				while [ "$(netstat -lnWp | grep tcp | grep ":$newtrackerport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newtrackerport++;sleep 1;done
 				sed -i "s/=$defineport$/=$newdefineport/" $sdadir/qBittorrent_files/config/qBittorrent.conf
+				sed -i "s/=$definetrackerport$/=$newtrackerport/" $sdadir/qBittorrent_files/config/qBittorrent.conf
 			else
-				newuser=1 && newdefineport=6880 && mkdir -p $sdadir/qBittorrent_files/config
+				newuser=1 && newdefineport=6880 && newtrackerport=54345 && mkdir -p $sdadir/qBittorrent_files/config
 				while [ "$(netstat -lnWp | grep tcp | grep ":$newdefineport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdefineport++;sleep 1;done
-				echo -e "[Preferences]\nWebUI\Username=admin\nWebUI\Password_PBKDF2=\"@ByteArray(yVAdTgYH36q3jEXe7W7i/A==:8Gmdf4KqS9nZ48ySkl+eX4z9dQWZxqECKJDl8B4c3rIgzf6TcxNACvSbVohaL+ltcHgICPGbg5jUhx1eZx25Ag==)\"" >> $sdadir/qBittorrent_files/config/qBittorrent.conf
+				while [ "$(netstat -lnWp | grep ":$newtrackerport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newtrackerport++;sleep 1;done
+				echo -e "[Preferences]\nAdvanced\trackerPort=$newtrackerport\nBittorrent\CustomizeTrackersListUrl=https://trackerslist.com/all.txt\nGeneral\Locale=zh_CN\nWebUI\AuthSubnetWhitelist=0.0.0.0/0\nWebUI\AuthSubnetWhitelistEnabled=true\nWebUI\Username=admin\nWebUI\Password_PBKDF2=\"@ByteArray(yVAdTgYH36q3jEXe7W7i/A==:8Gmdf4KqS9nZ48ySkl+eX4z9dQWZxqECKJDl8B4c3rIgzf6TcxNACvSbVohaL+ltcHgICPGbg5jUhx1eZx25Ag==)\"" >> $sdadir/qBittorrent_files/config/qBittorrent.conf
 			fi
 			$sdadir/$2 --webui-port=$newdefineport --profile=$sdadir --configuration=files -d &> /dev/null
 		}
@@ -904,6 +909,7 @@ sda_install_remove(){
 				while [ "$(pidof $2)" ];do killpid $(pidof $2 | awk '{print $1}');done
 				sessionPort=$(cat $sdadir/qBittorrent_files/config/qBittorrent.conf | grep -F 'Session\Port' | sed 's/.*=//')
 				firewalllog "add" "$1" "wan${sessionPort}rdr3" "tcpudp" "1" "wan" "$sessionPort" "$sessionPort"
+				firewalllog "add" "$1" "wan${newtrackerport}rdr3" "tcpudp" "1" "wan" "$newtrackerport" "$newtrackerport"
 				firewalllog "add" "$1" "wan${newdefineport}rdr1" "tcp" "1" "wan" "$newdefineport" "$newdefineport"
 				echo -e "\t$sdadir/$2 --webui-port=$newdefineport --profile=$sdadir --configuration=files -d" >> $autostartfileinit
 				[ "$tmpdir" -a ! "$skipdownload" ] && echo -e "\texport PATH=/data/unzip:\$PATH && unzip -oq /tmp/$1.tmp -d /tmp && mv -f /tmp/$2 /tmp/XiaomiSimpleInstallBox/$2" >> $downloadfileinit
