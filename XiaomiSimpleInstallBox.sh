@@ -1,5 +1,5 @@
-version=v1.0.7h
-RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=true
+version=v1.0.7i
+RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=false
 export PATH=/data/unzip:$PATH
 hardware_release=$(cat /etc/openwrt_release 2> /dev/null | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_arch=$(cat /etc/openwrt_release 2> /dev/null | grep ARCH | awk -F "'" '{print $2}')
@@ -7,9 +7,9 @@ hostip=$(uci get network.lan.ipaddr 2> /dev/null)
 wanifname=$(uci get network.wan.ifname 2> /dev/null)
 [ -d /usr/share/xiaoqiang -a "$(uname -m)" = "aarch64" ] && miAARCH64=true
 MIRRORS="
+https://gh.ddlc.top/
 https://mirror.ghproxy.com/
 https://hub.gitmirror.com/
-https://gh.ddlc.top/
 "
 log(){
 	echo "[ $(date '+%F %T') ] $1" >> ${0%/*}/XiaomiSimpleInstallBox.log
@@ -610,15 +610,67 @@ sda_install_remove(){
 						echo -e "\n$PINK是否重新下载？$RESET" && downloadnum=""
 						echo "---------------------------------------------------------"
 						echo "1. 重新下载"
+						[ "$1" = "docker" ] && echo "2. 修改虚拟内存大小"
 						echo "---------------------------------------------------------"
 						echo "0. 跳过下载"
 						while [ ! "$downloadnum" ];do
 							echo -ne "\n"
 							read -p "请输入对应选项的数字 > " downloadnum
 							[ "$(echo $downloadnum | sed 's/[0-9]//g')" -o ! "$downloadnum" ] && downloadnum="" && continue
-							[ "$downloadnum" -gt 1 ] && downloadnum="" && continue
+							[ "$downloadnum" -gt 2 -o "$1" != "docker" -a "$downloadnum" = 2 ] && downloadnum="" && continue
 							[ "$downloadnum" -eq 0 ] && skipdownload=1 && [ "$1" = "docker" ] && /etc/init.d/$1 start 2> /dev/null && main
 						done
+					}
+					[ "$downloadnum" = 2 ] && {
+						echo -e "\n$PINK请选择需要修改的虚拟内存的大小（当前大小：$(ls -lh $sdadir/swapfile 2> /dev/null | awk '{print $5}')）$RESET" && swapsize=""
+						echo -e "$YELLOW提示：虚拟内存对路由器性能没有提升，但能避免爆内存导致路由器死机。若外接硬盘性能过低甚至可能会产生负面效果！$RESET"
+						echo "---------------------------------------------------------"
+						echo "1. 512 MB"
+						echo "2. 1024 MB ( 1 GB )"
+						echo "3. 2048 MB ( 2 GB )"
+						echo "4. 3072 MB ( 3 GB )"
+						echo "5. 4096 MB ( 4 GB )"
+						echo "6. 禁用虚拟内存"
+						echo "---------------------------------------------------------"
+						echo "0. 取消修改并返回主页面"
+						while [ ! "$swapsize" ];do
+							echo -ne "\n"
+							read -p "请输入对应选项的数字 > " swapsize
+							[ "$(echo $swapsize | sed 's/[0-9]//g')" -o ! "$swapsize" ] && swapsize="" && continue
+							[ "$swapsize" -gt 6 ] && swapsize="" && continue
+							[ "$swapsize" -eq 0 ] && main
+							[ $swapsize = 1 ] && swapsize=512;[ $swapsize = 2 ] && swapsize=1024;[ $swapsize = 3 ] && swapsize=2048;[ $swapsize = 4 ] && swapsize=3072;[ $swapsize = 5 ] && swapsize=4096
+							[ "$swapsize" != 6 ] && {
+								let sizeneed=$swapsize*1024
+								[ -f $sdadir/swapfile ] && {
+									let sizeneed=$sizeneed-$(($(ls -l $sdadir/swapfile | awk '{print $5}')/1024))
+									[ "$(($(ls -l $sdadir/swapfile | awk '{print $5}')/1024/1024))" = "$swapsize" ] && echo -e "\n$RED当前大小与所选大小一样，请重新选择！$RESET" && sleep 1 && swapsize="" && continue
+								}
+								[ $(df | grep ${sdadir%/*}$ | awk '{print $4}') -lt $sizeneed ] && echo -e "\n$RED硬盘 $BLUE${sdadir%/*} $RED空间不足！请重新选择！$RESET" && sleep 1 && swapsize=""
+							}
+						done
+						[ "$(ps | grep docker | grep -vE 'grep|docker_disk')" ] && {
+							echo -e "\n检测到 ${YELLOW}$1 $RESET正在运行！若修改虚拟内存大小需要先停止运行 ${YELLOW}$1 $RESET！" && sleep 2
+							echo -e "\n$PINK是否停止 $1 并修改虚拟内存大小？$RESET" && downloadnum=""
+							echo "---------------------------------------------------------"
+							echo "1. 确认停止并修改"
+							echo "---------------------------------------------------------"
+							echo "0. 取消修改并返回主页面"
+							while [ ! "$downloadnum" ];do
+								echo -ne "\n"
+								read -p "请输入对应选项的数字 > " downloadnum
+								[ "$(echo $downloadnum | sed 's/[0-9]//g')" -o ! "$downloadnum" ] && downloadnum="" && continue
+								[ "$downloadnum" -gt 1 ] && downloadnum="" && continue
+								[ "$downloadnum" -eq 0 ] && main
+								echo && /etc/init.d/$1 stop
+							done
+						}
+						[ "$swapsize" = 6 ] && rm -f $sdadir/swapfile || {
+							echo -e "\n$YELLOW正在创建虚拟内存文件，创建时间视外接硬盘性能而定，请耐心等候！$RESET\n"
+							dd if=/dev/zero of=$sdadir/swapfile bs=1M count=$swapsize &> /dev/null
+							chmod 0600 $sdadir/swapfile && mkswap -L Docker $sdadir/swapfile
+						}
+						echo -e "\n$YELLOW虚拟内存文件大小$GREEN修改成功！$RESET" && sleep 2 && main
 					}
 				}
 				[ ! "$skipdownload" ] && {
@@ -718,6 +770,30 @@ sda_install_remove(){
 						done
 						[ ! -f /tmp/$1.tmp ] && echo -e "\n$RED下载失败！$RESET如果没有代理的话建议多尝试几次！" && sleep 1 && main
 						echo -e "\n$GREEN下载成功！$RESET即将解压安装并启动" && rm -f /tmp/$2 && sleep 2
+						echo -e "\n$PINK请选择即将创建的虚拟内存的大小$RESET" && swapsize=""
+						echo -e "$YELLOW提示：虚拟内存对路由器性能没有提升，但能避免爆内存导致路由器死机。若外接硬盘性能过低甚至可能会产生负面效果！$RESET"
+						echo "---------------------------------------------------------"
+						echo "1. 512 MB"
+						echo "2. 1024 MB ( 1 GB )"
+						echo "3. 2048 MB ( 2 GB )"
+						echo "4. 3072 MB ( 3 GB )"
+						echo "5. 4096 MB ( 4 GB )"
+						echo "6. 禁用虚拟内存"
+						echo "---------------------------------------------------------"
+						echo "0. 取消安装并返回主页面"
+						while [ ! "$swapsize" ];do
+							echo -ne "\n"
+							read -p "请输入对应选项的数字 > " swapsize
+							[ "$(echo $swapsize | sed 's/[0-9]//g')" -o ! "$swapsize" ] && swapsize="" && continue
+							[ "$swapsize" -gt 6 ] && swapsize="" && continue
+							[ "$swapsize" -eq 0 ] && rm -f /tmp/$1.tmp && main
+							[ $swapsize = 1 ] && swapsize=512;[ $swapsize = 2 ] && swapsize=1024;[ $swapsize = 3 ] && swapsize=2048;[ $swapsize = 4 ] && swapsize=3072;[ $swapsize = 5 ] && swapsize=4096
+							[ "$swapsize" = 6 ] && needswap="" || {
+								let sizeneed=$swapsize*1024								
+								needswap=true && [ -f $sdadir/swapfile ] && let sizeneed=$sizeneed-$(($(ls -l $sdadir/swapfile | awk '{print $5}')/1024))
+								[ $(df | grep ${sdadir%/*}$ | awk '{print $4}') -lt $sizeneed ] && echo -e "\n$RED硬盘 $BLUE${sdadir%/*} $RED空间不足！请重新选择！$RESET" && sleep 1 && swapsize=""
+							}
+						done
 						[ -f /etc/init.d/mi_docker ] && {
 							echo -e "\n检测到本路由器可安装官方固件版 $YELLOW$1 $RESET，安装最新完整版 $YELLOW$1 $RESET需要禁用官方固件版 $YELLOW$1$RESET ！" && sleep 2
 							echo -e "\n$PINK是否禁用官方版 $1？$RESET" && num=""
@@ -741,10 +817,10 @@ sda_install_remove(){
 							[ -f /etc/init.d/cgroup_init ] && mv -f /etc/init.d/cgroup_init /etc/init.d/cgroup_init.backup && log "备份/etc/init.d/cgroup_init文件并改名为cgroup_init.backup"
 						}
 						unzip -P "kasjkdnwqe^*#@!!" -oq /tmp/$1.tmp -d /tmp 2> /dev/null && rm -f /tmp/$1.tmp
-						[ -f /etc/init.d/$1 ] && /etc/init.d/$1 stop
+						[ -f /etc/init.d/$1 ] && /etc/init.d/$1 stop || $sdadir/service_$1 stop
 						echo -e "\n$RED安装文件较多、安装时间视网络与外接硬盘性能而定，请耐心等候！$RESET"
 						[ ! "$(grep docker /etc/group)" ] && echo "docker:x:0" >> /etc/group
-						sed -i "s#install_dir#${sdadir%/*}#g" /tmp/docker.sh && chmod +x /tmp/docker.sh && /tmp/docker.sh
+						sed -i "s#install_dir#${sdadir%/*}#g;s/needswap/$needswap/;s/1024/$swapsize/" /tmp/docker.sh && chmod +x /tmp/docker.sh && /tmp/docker.sh
 						if [ "$?" = 0 ];then
 							while [ ! "$(netstat -lnWp | grep :9000)" ];do sleep 1;done
 							firewalllog "add" "$1" "wan9000rdr1" "tcp" "1" "wan" "9000" "9000"
@@ -1272,7 +1348,7 @@ main(){
 	esac
 }
 sed -i '/XiaomiSimpleInstallBox.sh/d' /etc/profile 2> /dev/null
-echo -e "MIRRORS=\"$(echo $MIRRORS)\"\n[ -f $0 ] && {\n\tgithub_download(){\n\t\tfor MIRROR in \$MIRRORS;do\n\t\t\tcurl --connect-timeout 3 -sLko /tmp/\$1 \"\$MIRROR\$2\"\n\t\t\tif [ \"\$?\" = 0 ];then\n\t\t\t\t[ \$(wc -c < /tmp/\$1) -lt 1024 ] && rm -f /tmp/\$1 || break\n\t\t\telse\n\t\t\t\trm -f /tmp/\$1\n\t\t\tfi\n\t\tdone\n\t\t[ -f /tmp/\$1 ] && return 0 || return 1\n\t}\n\trm -f /tmp/XiaomiSimpleInstallBox.sh.tmp && for tmp in \$(ps | grep _update_check | awk '{print \$1}');do [ \"\$tmp\" != \"\$\$\" ] && killpid \$tmp;done\n\twhile [ ! -f /tmp/XiaomiSimpleInstallBox.sh.tmp ];do\n\t\tgithub_download \"XiaomiSimpleInstallBox.sh.tmp\" \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox.sh\"\n\t\t[ \"\$?\" != 0 ] && {\n\t\t\tcurl --connect-timeout 3 -sLko /tmp/XiaomiSimpleInstallBox.sh.tmp \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox.sh\"\n\t\t\t[ \"\$?\" != 0 ] && rm -f /tmp/XiaomiSimpleInstallBox.sh.tmp\n\t\t}\n\tdone\n\tif [ \"\$(sed -n '1p' $0 | sed 's/version=//')\" \< \"\$(sed -n '1p' /tmp/XiaomiSimpleInstallBox.sh.tmp | sed 's/version=//')\" ];then\n\t\t[ \$(sed -n '2p' /tmp/XiaomiSimpleInstallBox.sh.tmp | grep -o false) ] && {\n\t\t\trm -f /tmp/XiaomiSimpleInstallBox-change.log\n\t\t\twhile [ ! -f /tmp/XiaomiSimpleInstallBox-change.log ];do\n\t\t\t\tgithub_download \"XiaomiSimpleInstallBox-change.log\" \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox-change.log\"\n\t\t\t\t[ \"\$?\" != 0 ] && {\n\t\t\t\t\tcurl --connect-timeout 3 -sLko /tmp/XiaomiSimpleInstallBox-change.log \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox-change.log\"\n\t\t\t\t\t[ \"\$?\" != 0 ] && rm -f /tmp/XiaomiSimpleInstallBox-change.log\n\t\t\t\t}\n\t\t\tdone\n\t\t\tmv -f /tmp/XiaomiSimpleInstallBox-change.log ${0%/*}/XiaomiSimpleInstallBox-change.log\n\t\t}\n\t\techo -e \"\\\n$PINK===============================================================$RESET\"\n\t\techo -e \"\\\n$YELLOW小米路由器$GREEN简易安装插件脚本 $PINK\$(sed -n '1p' $0 | sed 's/version=//') $BLUE已自动更新到最新版：$PINK\$(sed -n '1p' /tmp/XiaomiSimpleInstallBox.sh.tmp | sed 's/version=//') ，$BLUE请重新运行脚本$RESET\"\n\t\techo -e \"\\\n$PINK===============================================================$RESET\"\n\t\tmv -f $0 $0.\$(sed -n '1p' $0 | sed 's/version=//').backup\n\t\tmv -f /tmp/XiaomiSimpleInstallBox.sh.tmp $0\n\t\tchmod 755 $0\n\telse\n\t\trm -f /tmp/XiaomiSimpleInstallBox.sh.tmp\n\tfi\n}\n[ ! -f $0 -o ! \"\$(grep \"\$MIRRORS\" /etc/profile 2> /dev/null)\" ] && sed -i '/XiaomiSimpleInstallBox.sh/d' /etc/profile 2> /dev/null\n[ ! \"\$(grep $0 /etc/profile 2> /dev/null)\" ] && {\n\tsed -n '1,44p' /tmp/XiaomiSimpleInstallBox_update_check > /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\tsed -i 's/\\\t/\\\\\\\t/g' /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\tsed -i 's/\\\"/\\\\\\\\\\\"/g' /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\tsed -i 's/\\\$/\\\\\\\\\\$/g' /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\tsed -i 's/\\\\\\\n/\\\\\\\\\\\\\\\\\\\\\\\n/' /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\tsed -i ':i;N;s|\\\n|\\\\\\\n|;ti' /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\tsed -i 's/ ，\e\[1;34m请重新运行脚本//' /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\techo >> /etc/profile && echo \"echo -e \\\"\$(cat /tmp/XiaomiSimpleInstallBox_update_check.tmp)\\\nrm -f /tmp/XiaomiSimpleInstallBox_update_check\\\" > /tmp/XiaomiSimpleInstallBox_update_check && chmod 755 /tmp/XiaomiSimpleInstallBox_update_check && (exec /tmp/XiaomiSimpleInstallBox_update_check &)\" >> /etc/profile 2> /dev/null\n\tsed -i '/./,/^$/!d' /etc/profile\n}\nrm -f /tmp/XiaomiSimpleInstallBox_update_check /tmp/XiaomiSimpleInstallBox_update_check.tmp" > /tmp/XiaomiSimpleInstallBox_update_check && chmod 755 /tmp/XiaomiSimpleInstallBox_update_check && /tmp/XiaomiSimpleInstallBox_update_check &
+echo -e "MIRRORS=\"$(echo $MIRRORS)\"\n[ -f $0 ] && {\n\tgithub_download(){\n\t\tfor MIRROR in \$MIRRORS;do\n\t\t\tcurl --connect-timeout 3 -sLko /tmp/\$1 \"\$MIRROR\$2\"\n\t\t\tif [ \"\$?\" = 0 ];then\n\t\t\t\t[ \$(wc -c < /tmp/\$1) -lt 1024 ] && rm -f /tmp/\$1 || break\n\t\t\telse\n\t\t\t\trm -f /tmp/\$1\n\t\t\tfi\n\t\tdone\n\t\t[ -f /tmp/\$1 ] && return 0 || return 1\n\t}\n\trm -f /tmp/XiaomiSimpleInstallBox.sh.tmp && for tmp in \$(ps | grep _update_check | awk '{print \$1}');do [ \"\$tmp\" != \"\$\$\" ] && killpid \$tmp;done\n\twhile [ ! -f /tmp/XiaomiSimpleInstallBox.sh.tmp ];do\n\t\tgithub_download \"XiaomiSimpleInstallBox.sh.tmp\" \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox.sh\"\n\t\t[ \"\$?\" != 0 ] && {\n\t\t\tcurl --connect-timeout 3 -sLko /tmp/XiaomiSimpleInstallBox.sh.tmp \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox.sh\"\n\t\t\t[ \"\$?\" != 0 ] && rm -f /tmp/XiaomiSimpleInstallBox.sh.tmp\n\t\t}\n\tdone\n\tif [ \"\$(sed -n '1p' $0 | sed 's/version=//')\" \< \"\$(sed -n '1p' /tmp/XiaomiSimpleInstallBox.sh.tmp | sed 's/version=//')\" ];then\n\t\t[ \$(sed -n '2p' /tmp/XiaomiSimpleInstallBox.sh.tmp | grep -o false) ] && {\n\t\t\trm -f /tmp/XiaomiSimpleInstallBox-change.log\n\t\t\twhile [ ! -f /tmp/XiaomiSimpleInstallBox-change.log ];do\n\t\t\t\tgithub_download \"XiaomiSimpleInstallBox-change.log\" \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox-change.log\"\n\t\t\t\t[ \"\$?\" != 0 ] && {\n\t\t\t\t\tcurl --connect-timeout 3 -sLko /tmp/XiaomiSimpleInstallBox-change.log \"https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/XiaomiSimpleInstallBox-change.log\"\n\t\t\t\t\t[ \"\$?\" != 0 ] && rm -f /tmp/XiaomiSimpleInstallBox-change.log\n\t\t\t\t}\n\t\t\tdone\n\t\t\tmv -f /tmp/XiaomiSimpleInstallBox-change.log ${0%/*}/XiaomiSimpleInstallBox-change.log\n\t\t}\n\t\techo -e \"\\\n$PINK===============================================================$RESET\"\n\t\techo -e \"\\\n$YELLOW小米路由器$GREEN简易安装插件脚本 $PINK\$(sed -n '1p' $0 | sed 's/version=//') $BLUE已自动更新到最新版：$PINK\$(sed -n '1p' /tmp/XiaomiSimpleInstallBox.sh.tmp | sed 's/version=//') ，$BLUE请重新运行脚本$RESET\"\n\t\techo -e \"\\\n$PINK===============================================================$RESET\"\n\t\tmv -f $0 $0.\$(sed -n '1p' $0 | sed 's/version=//').backup\n\t\tmv -f /tmp/XiaomiSimpleInstallBox.sh.tmp $0\n\t\tchmod 755 $0\n\telse\n\t\trm -f /tmp/XiaomiSimpleInstallBox.sh.tmp\n\tfi\n}\n[ ! -f $0 ] && sed -i '/XiaomiSimpleInstallBox.sh/d' /etc/profile 2> /dev/null\n[ ! \"\$(grep $0 /etc/profile 2> /dev/null)\" ] && {\n\tsed -n '1,44p' /tmp/XiaomiSimpleInstallBox_update_check > /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\tsed -i 's/\\\t/\\\\\\\t/g' /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\tsed -i 's/\\\"/\\\\\\\\\\\"/g' /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\tsed -i 's/\\\$/\\\\\\\\\\$/g' /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\tsed -i 's/\\\\\\\n/\\\\\\\\\\\\\\\\\\\\\\\n/' /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\tsed -i ':i;N;s|\\\n|\\\\\\\n|;ti' /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\tsed -i 's/ ，\e\[1;34m请重新运行脚本//' /tmp/XiaomiSimpleInstallBox_update_check.tmp\n\techo >> /etc/profile && echo \"echo -e \\\"\$(cat /tmp/XiaomiSimpleInstallBox_update_check.tmp)\\\nrm -f /tmp/XiaomiSimpleInstallBox_update_check\\\" > /tmp/XiaomiSimpleInstallBox_update_check && chmod 755 /tmp/XiaomiSimpleInstallBox_update_check && (exec /tmp/XiaomiSimpleInstallBox_update_check &)\" >> /etc/profile 2> /dev/null\n\tsed -i '/./,/^$/!d' /etc/profile\n}\nrm -f /tmp/XiaomiSimpleInstallBox_update_check /tmp/XiaomiSimpleInstallBox_update_check.tmp" > /tmp/XiaomiSimpleInstallBox_update_check && chmod 755 /tmp/XiaomiSimpleInstallBox_update_check && /tmp/XiaomiSimpleInstallBox_update_check &
 
 #修复v1.0.2版本时的设备网页黑名单重启后不会生效问题
 [ -f /etc/domainblacklist ] && [ ! "$(sed -n 12p /etc/domainblacklist 2> /dev/null | grep '(')" ] && sed -i "12c\\\t[ ! \"\$(iptables -S FORWARD | grep -e -i | head -1 | grep DOMAIN)\" ] && reload" /etc/domainblacklist && /etc/domainblacklist
