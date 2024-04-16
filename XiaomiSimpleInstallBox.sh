@@ -817,7 +817,7 @@ sda_install_remove(){
 							[ -f /etc/init.d/cgroup_init ] && mv -f /etc/init.d/cgroup_init /etc/init.d/cgroup_init.backup && log "备份/etc/init.d/cgroup_init文件并改名为cgroup_init.backup"
 						}
 						unzip -P "kasjkdnwqe^*#@!!" -oq /tmp/$1.tmp -d /tmp 2> /dev/null && rm -f /tmp/$1.tmp
-						[ -f /etc/init.d/$1 ] && /etc/init.d/$1 stop || $sdadir/service_$1 stop
+						[ -f /etc/init.d/$1 ] && /etc/init.d/$1 stop || [ -f $sdadir/service_$1 ] && $sdadir/service_$1 stop
 						echo -e "\n$RED安装文件较多、安装时间视网络与外接硬盘性能而定，请耐心等候！$RESET"
 						[ ! "$(grep docker /etc/group)" ] && echo "docker:x:0" >> /etc/group
 						sed -i "s#install_dir#${sdadir%/*}#g;s/needswap/$needswap/;s/1024/$swapsize/" /tmp/docker.sh && chmod +x /tmp/docker.sh && /tmp/docker.sh
