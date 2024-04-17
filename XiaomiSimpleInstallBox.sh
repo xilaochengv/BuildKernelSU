@@ -530,7 +530,6 @@ sda_install_remove(){
 		fi
 	fi
 	[ "$del" ] && {
-		[ "$1" = "docker" -o "$1" = "homeassistant" ] && echo -e "\n$YELLOW删除文件较多、卸载时间视外接硬盘性能而定，请耐心等候！$RESET"
 		$autostartfileinit stop 2> /dev/null
 		[ -f $autostartfileinit ] && rm -f $autostartfileinit && log "删除自启动文件$autostartfileinit"
 		[ -L $autostartfilerc ] && rm -f $autostartfilerc && log "删除自启动链接文件$autostartfilerc"
@@ -563,6 +562,7 @@ sda_install_remove(){
 			docker rmi homeassistant/aarch64-homeassistant &> /dev/null
 			sdadir=$sdadir/homeassistant
 		}
+		[ "$sdadir" ] && [ "$1" = "docker" -o "$1" = "homeassistant" ] && echo -e "\n$YELLOW删除文件较多、卸载时间视外接硬盘性能而定，请耐心等候！$RESET"
 		[ "$sdadir" ] && rm -rf $sdadir && log "删除文件夹$sdadir"
 		echo -e "\n$YELLOW$1 $RED已一键删除！$RESET" && sleep 1 && main
 	}
@@ -790,7 +790,7 @@ sda_install_remove(){
 							[ "$swapsize" -eq 0 ] && rm -f /tmp/$1.tmp && main
 							[ $swapsize = 1 ] && swapsize=512;[ $swapsize = 2 ] && swapsize=1024;[ $swapsize = 3 ] && swapsize=2048;[ $swapsize = 4 ] && swapsize=3072;[ $swapsize = 5 ] && swapsize=4096
 							[ "$swapsize" = 6 ] && needswap="" || {
-								let sizeneed=$swapsize*1024								
+								let sizeneed=$swapsize*1024
 								needswap=true && [ -f $sdadir/swapfile ] && let sizeneed=$sizeneed-$(($(ls -l $sdadir/swapfile | awk '{print $5}')/1024))
 								[ $(df | grep ${sdadir%/*}$ | awk '{print $4}') -lt $sizeneed ] && echo -e "\n$RED硬盘 $BLUE${sdadir%/*} $RED空间不足！请重新选择！$RESET" && sleep 1 && swapsize=""
 							}
