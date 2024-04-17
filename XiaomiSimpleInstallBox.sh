@@ -555,14 +555,14 @@ sda_install_remove(){
 			[ -f /etc/init.d/mi_docker.backup ] && mv -f /etc/init.d/mi_docker.backup /etc/init.d/mi_docker && log "恢复/etc/init.d/mi_docker.backup文件并改名为mi_docker"
 			[ -f /etc/init.d/cgroup_init.backup ] && mv -f /etc/init.d/cgroup_init.backup /etc/init.d/cgroup_init && log "恢复/etc/init.d/cgroup_init.backup文件并改名为cgroup_init" && /etc/init.d/cgroup_init start
 		}
+		[ "$sdadir" ] && [ "$1" = "docker" -o "$1" = "homeassistant" ] && echo -e "\n$YELLOW删除文件较多、卸载时间视外接硬盘性能而定，请耐心等候！$RESET"
 		[ "$1" = "homeassistant" ] && {
 			[ ! "$(ps | grep docker | grep -vE 'grep|docker_disk')" ] && echo -e "\n请先启动 ${YELLOW}Docker$RESET ！" && sleep 2 && main
-			docker stop Home-Assistants &> /dev/null
+			echo -e "\n$YELLOW正在停止运行 Home-Assistants ······$RESET" && docker stop Home-Assistants &> /dev/null
 			docker rm Home-Assistants &> /dev/null
-			docker rmi homeassistant/aarch64-homeassistant &> /dev/null
+			echo -e "\n$YELLOW正在删除 Home-Assistants ······$RESET" && docker rmi homeassistant/aarch64-homeassistant &> /dev/null
 			sdadir=$sdadir/homeassistant
 		}
-		[ "$sdadir" ] && [ "$1" = "docker" -o "$1" = "homeassistant" ] && echo -e "\n$YELLOW删除文件较多、卸载时间视外接硬盘性能而定，请耐心等候！$RESET"
 		[ "$sdadir" ] && rm -rf $sdadir && log "删除文件夹$sdadir"
 		echo -e "\n$YELLOW$1 $RED已一键删除！$RESET" && sleep 1 && main
 	}
