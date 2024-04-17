@@ -1,4 +1,4 @@
-version=v1.0.7i
+version=v1.0.7j
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=false
 export PATH=/data/unzip:$PATH
 hardware_release=$(cat /etc/openwrt_release 2> /dev/null | grep RELEASE | grep -oE [.0-9]{1,10})
@@ -502,21 +502,22 @@ sda_install_remove(){
 		[ ! "$del" ] && {
 			old_tag=$(eval $sdadir/$2 $3 2> /dev/null | sed 's/.*v/v/;s/^[^v]/v&/');[ "$7" ] && $7
 			[ "$1" = "homeassistant" ] && {
-				echo -e "\n找到 $YELLOW$2$RESET 的安装路径：$BLUE$sdadir$RESET" && sleep 2
+				echo -e "\n找到 $YELLOW$2$RESET 的安装路径：$BLUE$sdadir$RESET" && sleep 2 && export PATH=$sdadir:$PATH
 				[ ! "$(ps | grep docker | grep -vE 'grep|docker_disk')" ] && echo -e "\n请先启动 ${YELLOW}Docker$RESET ！" && sleep 2 && main
 				if [ ! -d $sdadir/homeassistant/custom_components/hacs ];then
 					sdadir_available_check "$1" "$2" "$3" "$4";[ "$?" = 1 ] && main
+					echo -e "\n$RED安装文件较多、安装时间视网络与外接硬盘性能而定，请耐心等候！$RESET"
 					echo -e "\n$YELLOW获取 Home-Assistants 镜像 ······$RESET" && docker pull homeassistant/aarch64-homeassistant
 					echo -e "\n$YELLOW下载 HACS 文件 ······$RESET" && github_download "hacs.zip" "https://github.com/hacs-china/integration/releases/latest/download/hacs.zip"
 					[ "$?" != 0 ] && echo -e "$RED下载 HACS 文件失败！$RESET" && sleep 2 && main
 					echo -e "\n$YELLOW解压 HACS 文件 ······$RESET" && mkdir -p $sdadir/homeassistant/custom_components/hacs && unzip -oq /tmp/hacs.zip -d $sdadir/homeassistant/custom_components/hacs && rm -f /tmp/hacs.zip
 					echo -e "\n$YELLOW启动 Home-Assistants ······$RESET" && docker run -d --name Home-Assistants --restart=unless-stopped --privileged --network=host -e TZ=Asia/Shanghai -v $sdadir/homeassistant:/config homeassistant/aarch64-homeassistant &> /dev/null
-					while [ ! "$(netstat -lnWp | grep :1900)" ];do sleep 1;done
+					while [ ! "$(netstat -lnWp | grep :8123)" ];do sleep 1;done
 					echo -e "\n${YELLOW}Home-Assistants $GREEN安装成功$RESET！请登陆网页 $SKYBLUE$hostip:8123 $RESET进行管理" && main
 				else
 					docker run -d --name Home-Assistants --restart=unless-stopped --privileged --network=host -e TZ=Asia/Shanghai -v $sdadir/homeassistant:/config homeassistant/aarch64-homeassistant &> /dev/null
 					docker start Home-Assistants &> /dev/null
-					while [ ! "$(netstat -lnWp | grep :1900)" ];do sleep 1;done
+					while [ ! "$(netstat -lnWp | grep :8123)" ];do sleep 1;done
 					echo -e "\n${YELLOW}Home-Assistants $GREEN启动成功$RESET！请登陆网页 $SKYBLUE$hostip:8123 $RESET进行管理" && sleep 2 && main
 				fi
 			}
