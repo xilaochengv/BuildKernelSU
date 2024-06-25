@@ -1,7 +1,8 @@
-version=v1.0.7j
+version=v1.0.7k
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=false
 export PATH=/data/unzip:$PATH
 hardware_release=$(cat /etc/openwrt_release 2> /dev/null | grep RELEASE | grep -oE [.0-9]{1,10})
+hardware_target=$(cat /etc/openwrt_release 2> /dev/null | grep TARGET | awk -F / '{print $2}' | sed 's/_.*//')
 hardware_arch=$(cat /etc/openwrt_release 2> /dev/null | grep ARCH | awk -F "'" '{print $2}')
 hostip=$(uci get network.lan.ipaddr 2> /dev/null)
 wanifname=$(uci get network.wan.ifname 2> /dev/null)
@@ -29,7 +30,8 @@ opkg_test_install(){
 			[ "$?" != 0 ] && {
 				[ ! -f /etc/opkg/distfeeds.conf.backup ] && mv /etc/opkg/distfeeds.conf /etc/opkg/distfeeds.conf.backup && log "文件/etc/opkg/distfeeds.conf改名为distfeeds.conf.backup"
 				echo -e "\n更新源$RED连接失败$RESET，将尝试根据获取的机型信息 $PINK$hardware_release-$hardware_arch$RESET 进行重试\n" && sleep 2
-				echo "src/gz openwrt_base http://downloads.openwrt.org/releases/packages-$hardware_release/$hardware_arch/base" > /etc/opkg/distfeeds.conf
+				echo "src/gz openwrt_core http://downloads.openwrt.org/snapshots/targets/$hardware_target/generic/packages/" > /etc/opkg/distfeeds.conf
+				echo "src/gz openwrt_base http://downloads.openwrt.org/releases/packages-$hardware_release/$hardware_arch/base" >> /etc/opkg/distfeeds.conf
 				echo "src/gz openwrt_packages http://downloads.openwrt.org/releases/packages-$hardware_release/$hardware_arch/packages" >> /etc/opkg/distfeeds.conf
 				echo "src/gz openwrt_routing http://downloads.openwrt.org/releases/packages-$hardware_release/$hardware_arch/routing" >> /etc/opkg/distfeeds.conf && log "新建文件/etc/opkg/distfeeds.conf"
 				opkg update
@@ -590,7 +592,7 @@ sda_install_remove(){
 							[ "$?" = 0 ] && let adtagcount++
 						done
 					elif [ "$1" = "docker" ];then
-						tag_name=v$(curl -sk https://download.docker.com/linux/static/stable/aarch64/ | grep docker-[0-9] | tail -1 | awk -F \> '{print $1}' | grep -oE '[0-9].*[0-9]')
+						tag_name=$(curl -sk https://download.docker.com/linux/static/stable/aarch64/ | grep docker-[0-9] | tail -1 | awk -F \> '{print $1}' | grep -oE '[0-9].*[0-9]')
 					else
 						tag_name=$(curl --connect-timeout 3 -sk "$tag_url" | grep tag_name | cut -f4 -d '"')
 					fi
@@ -601,7 +603,8 @@ sda_install_remove(){
 				done
 				[ ! "$tag_name" ] && {
 					echo -e "$RED获取失败！\n\n获取版本号失败！$RESET如果没有代理的话建议多尝试几次！"
-					echo -e "\n如果响应时间很短但获取失败，则是每小时内的请求次数已超过 ${PINK}github$RESET 限制，请更换 ${YELLOW}IP$RESET 或者等待一段时间后再试！" && sleep 1 && main
+					[ "$1" != "docker" ] && echo -e "\n如果响应时间很短但获取失败，则是每小时内的请求次数已超过 ${PINK}github$RESET 限制，请更换 ${YELLOW}IP$RESET 或者等待一段时间后再试！"
+					sleep 1 && main
 				}
 				echo -e "$GREEN获取成功！$RESET当前最新版本：$PINK$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')$RESET" && sleep 2
 				[ "$old_tag" ] && {
@@ -687,7 +690,7 @@ sda_install_remove(){
 						echo "7. mips64"
 						echo "8. mips64el"
 						echo "---------------------------------------------------------"
-						echo "0. 返回上一页"
+						echo "0. 返回主页面"
 						echo -e "\n可以在 $SKYBLUE$urls$RESET 中查找并复制下载地址"
 						while [ ! "$num" ];do
 							echo -ne "\n"
@@ -703,7 +706,7 @@ sda_install_remove(){
 									6)	hardware_type=mipsle;;
 									7)	hardware_type=mips64;;
 									8)	hardware_type=mips64le;;
-									0)	sda_install_remove "$1" "$2" "$3" "$4" "$5" "$6" "$7" "return"
+									0)	main
 								esac
 							[ "$(echo $num | sed 's/[0-9]//g')" -a "${num:0:4}" != "http" -a "${num:0:3}" != "ftp" -o ! "$num" ] && num="" && continue
 							[ "${num:0:4}" != "http" -a "${num:0:3}" != "ftp" ] && [ "$num" -lt 1 -o "$num" -gt 8 ] && num="" && continue
@@ -753,7 +756,7 @@ sda_install_remove(){
 						esac
 						rm -f /tmp/$1.tmp
 					else
-						port=$(netstat -lnWp | grep -E ':8000 |:9000 |:9443 ' | awk '{print $4}' | grep -oE [0-9.]{1,5} | head -1)
+						port=$(netstat -lnWp | grep -E ':8000 |:9000 |:9443 ' | awk '{print $4}' | grep -oE :[0-9.]{1,6} | grep -oE [0-9]{1,5} | head -1)
 						process=$(netstat -lnWp | grep -E ':8000 |:9000 |:9443 ' | awk '{print $NF}' | sed 's/.*\///' | head -1)
 						[ "$port" ] && {
 							echo -e "\n$RED检测到 $PINK$port $RED端口已被 $YELLOW$process $RED占用！无法安装！$RESET" && sleep 2 && main
@@ -829,8 +832,8 @@ sda_install_remove(){
 							echo -e "\n${YELLOW}Docker $GREEN安装并启动成功！$RESET" && $autostartfileinit enable && cp -pf $autostartfileinit $sdadir/service_$1
 							echo -e "\n$YELLOW若需要使用 ${PINK}docker $YELLOW等命令，请关闭本窗口并重新进入 SSH ！$RESET"
 							echo -e "\n管理页面地址：$SKYBLUE$hostip:9000$RESET"
-							ipv4=$(curl --connect-timeout 3 -sLk v4.ident.me)
-							[ "$ipv4" ] && echo -e "\n外网管理页面地址：$SKYBLUE$ipv4:9000$RESET" && main
+							ipv4=$(curl -m 3 -sLk v4.ident.me)
+							[ "$ipv4" ] && echo -e "\n外网管理页面地址：$SKYBLUE$ipv4:9000$RESET";main
 						else
 							echo -e "\n$RED下载文件出错！请重试！$RESET" && sleep 2 && main
 						fi
@@ -1069,7 +1072,7 @@ sda_install_remove(){
 				echo -e "\n$YELLOW$1$RESET 端口转发规则 $GREEN已全部更新$RESET，即将重启防火墙 ······" && sleep 2 && /etc/init.d/firewall restart &> /dev/null
 				echo -e "\n${YELLOW}$1 $PINK$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/') $GREEN已运行$RESET并设置为$YELLOW开机自启动！$RESET"
 				echo -e "\n管理页面地址：$SKYBLUE$hostip:$newdefineport$RESET$DNSINFO"
-				ipv4=$(curl --connect-timeout 3 -sLk v4.ident.me)
+				ipv4=$(curl -m 3 -sLk v4.ident.me)
 				[ "$ipv4" ] && echo -e "\n外网管理页面地址：$SKYBLUE$ipv4:$newdefineport$RESET"
 				[ "$newuser" ] && echo -e "\n初始账号：${PINK}admin$RESET 初始密码：${PINK}12345678$RESET"
 				[ "$1" = "Alist" ] && echo -e "\n官方使用指南：${SKYBLUE}https://alist.nn.ci/zh/$RESET"
@@ -1198,7 +1201,7 @@ domainblacklist_update(){
 }
 main(){
 	num="$1" && [ ! "$num" ] && {
-		echo -e "\n$YELLOW=========================================================$RESET" &&
+		echo -e "\n$YELLOW=========================================================$RESET"
 		echo -e "\n$PINK\t\t[[  这里以下是主页面  ]]$RESET"
 		echo -e "\n$GREEN=========================================================$RESET"
 		echo -e "\n欢迎使用$YELLOW小米路由器$GREEN简易安装插件脚本 $PINK$version$RESET ，觉得好用希望能够$RED$BLINK打赏支持~！$RESET"
