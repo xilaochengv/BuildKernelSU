@@ -558,7 +558,7 @@ sda_install_remove(){
 			[ -f /etc/init.d/cgroup_init.backup ] && mv -f /etc/init.d/cgroup_init.backup /etc/init.d/cgroup_init && log "恢复/etc/init.d/cgroup_init.backup文件并改名为cgroup_init" && /etc/init.d/cgroup_init start
 		}
 		[ "$sdadir" ] && [ "$1" = "docker" -o "$1" = "homeassistant" ] && {
-			while [ "$(ps | grep -E '/docker/|s6-|assistant' | grep -v grep)" ];do sleep 1;done
+			while [ "$(ps | grep -E 's6-|assistant' | grep -v grep)" ];do sleep 1;done
 			echo -e "\n$YELLOW删除文件较多、卸载时间视外接硬盘性能而定，请耐心等候！$RESET"
 		}
 		[ "$1" = "homeassistant" ] && {
