@@ -1,5 +1,5 @@
-version=v1.0.7k
-RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=false
+version=v1.0.7l
+RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=true
 export PATH=/data/unzip:$PATH
 hardware_release=$(cat /etc/openwrt_release 2> /dev/null | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_target=$(cat /etc/openwrt_release 2> /dev/null | grep TARGET | awk -F / '{print $2}' | sed 's/_.*//')
@@ -557,7 +557,10 @@ sda_install_remove(){
 			[ -f /etc/init.d/mi_docker.backup ] && mv -f /etc/init.d/mi_docker.backup /etc/init.d/mi_docker && log "恢复/etc/init.d/mi_docker.backup文件并改名为mi_docker"
 			[ -f /etc/init.d/cgroup_init.backup ] && mv -f /etc/init.d/cgroup_init.backup /etc/init.d/cgroup_init && log "恢复/etc/init.d/cgroup_init.backup文件并改名为cgroup_init" && /etc/init.d/cgroup_init start
 		}
-		[ "$sdadir" ] && [ "$1" = "docker" -o "$1" = "homeassistant" ] && echo -e "\n$YELLOW删除文件较多、卸载时间视外接硬盘性能而定，请耐心等候！$RESET"
+		[ "$sdadir" ] && [ "$1" = "docker" -o "$1" = "homeassistant" ] && {
+			while [ "$(ps | grep -E '/docker/|s6-|assistant' | grep -v grep)" ];do sleep 1;done
+			echo -e "\n$YELLOW删除文件较多、卸载时间视外接硬盘性能而定，请耐心等候！$RESET"
+		}
 		[ "$1" = "homeassistant" ] && {
 			[ ! "$(ps | grep docker | grep -vE 'grep|docker_disk')" ] && echo -e "\n请先启动 ${YELLOW}Docker$RESET ！" && sleep 2 && main
 			echo -e "\n$YELLOW正在停止运行 Home-Assistants ······$RESET" && docker stop Home-Assistants &> /dev/null
