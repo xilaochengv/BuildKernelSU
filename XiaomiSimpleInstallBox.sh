@@ -1,4 +1,4 @@
-version=v1.0.7m
+version=v1.0.7n
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=true
 export PATH=/data/unzip:$PATH
 hardware_release=$(cat /etc/openwrt_release 2> /dev/null | grep RELEASE | grep -oE [.0-9]{1,10})
@@ -46,7 +46,8 @@ opkg_test_install(){
 			echo -e "\n安装 ${YELLOW}$1$RED 失败！$RESET请检查 $BLUE/etc/opkg/distfeeds.conf$RESET 中的地址是否正确或 ${SKYBLUE}/overlay$RESET 空间是否足够后重试！" && sleep 2
 			[ "$1" = "unzip" ] && {
 				echo -e "\n即将尝试下载 $YELLOW$1$RESET 到 $BLUE/data/$1$RESET 文件夹中使用 ······ \c" && sleep 2
-				curl -sko /tmp/$1.ipk https://downloads.openwrt.org/releases/packages-$hardware_release/$hardware_arch/packages/$1_$(opkg list $1 | awk '{print $3}' | head -1)_$hardware_arch.ipk
+				opkgpackagesurl=$(cat /etc/opkg/distfeeds.conf | grep openwrt_packages | awk '{print $3}')
+				rm -f /tmp/$1.ipk && curl -sko /tmp/$1.ipk $opkgpackagesurl/${1}_$(opkg list $1 | awk '{print $3}' | head -1)_$(echo $opkgpackagesurl | awk -F / '{print $6}').ipk
 				if [ "$?" = 0 ];then
 					[ $(wc -c < /tmp/$1.ipk) -lt 1024 ] && rm -f /tmp/$1.ipk && echo -e "$RED下载失败！$RESET" && sleep 2 && main
 					echo -e "$GREEN下载成功！$RESET" && sleep 2
