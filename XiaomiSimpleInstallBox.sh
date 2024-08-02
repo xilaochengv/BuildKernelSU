@@ -1,4 +1,4 @@
-version=v1.0.7n
+version=v1.0.7o
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=true
 export PATH=/data/unzip:$PATH
 hardware_release=$(cat /etc/openwrt_release 2> /dev/null | grep RELEASE | grep -oE [.0-9]{1,10})
@@ -30,7 +30,7 @@ opkg_test_install(){
 			[ "$?" != 0 ] && {
 				[ ! -f /etc/opkg/distfeeds.conf.backup ] && mv /etc/opkg/distfeeds.conf /etc/opkg/distfeeds.conf.backup && log "文件/etc/opkg/distfeeds.conf改名为distfeeds.conf.backup"
 				echo -e "\n更新源$RED连接失败$RESET，将尝试根据获取的机型信息 $PINK$hardware_release-$hardware_arch$RESET 进行重试\n" && sleep 2
-				echo "src/gz openwrt_core http://downloads.openwrt.org/snapshots/targets/$hardware_target/generic/packages/" > /etc/opkg/distfeeds.conf
+				echo "src/gz openwrt_core http://downloads.openwrt.org/snapshots/targets/$hardware_target/generic/packages" > /etc/opkg/distfeeds.conf
 				echo "src/gz openwrt_base http://downloads.openwrt.org/releases/packages-$hardware_release/$hardware_arch/base" >> /etc/opkg/distfeeds.conf
 				echo "src/gz openwrt_packages http://downloads.openwrt.org/releases/packages-$hardware_release/$hardware_arch/packages" >> /etc/opkg/distfeeds.conf
 				echo "src/gz openwrt_routing http://downloads.openwrt.org/releases/packages-$hardware_release/$hardware_arch/routing" >> /etc/opkg/distfeeds.conf && log "新建文件/etc/opkg/distfeeds.conf"
@@ -768,7 +768,7 @@ sda_install_remove(){
 						opkg_test_install "unzip"
 						echo -e "\n下载 ${YELLOW}$1 $RESET安装脚本 ······" && retry_count=5
 						while [ ! -f /tmp/$1.tmp -a $retry_count != 0 ];do
-							github_download "$1.tmp" "https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/docker.zip"
+							curl --connect-timeout 3 -#Lko /tmp/$1.tmp "https://raw.githubusercontent.com/xilaochengv/BuildKernelSU/main/docker.zip"
 							if [ "$?" != 0 ];then
 								rm -f /tmp/$1.tmp && let retry_count--
 								[ $retry_count != 0 ] && echo -e "\n$RED下载失败！$RESET即将尝试重连······（剩余重试次数：$PINK$retry_count$RESET）" && sleep 1
