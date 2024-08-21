@@ -1,4 +1,4 @@
-version=v1.0.7o
+version=v1.0.7p
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=true
 export PATH=/data/unzip:$PATH
 hardware_release=$(cat /etc/openwrt_release 2> /dev/null | grep RELEASE | grep -oE [.0-9]{1,10})
@@ -988,7 +988,7 @@ sda_install_remove(){
 		}
 		while [ ! "$(pidof $2)" -a "$runtimecount" -lt 5 ];do let runtimecount++;sleep 1;done
 		if [ "$(pidof $2)" ];then
-			echo -e "#!/bin/sh /etc/rc.common\n\nSTART=95\n\nstart() {" > $autostartfileinit
+			echo -e "#!/bin/sh /etc/rc.common\n\nSTART=95\n\nstart() {\n\texistedpid=\$(ps | grep -v grep | grep $2 | awk '{print \$1}');for pid in \$existedpid;do [ \$pid != \$\$ ] && killpid \$pid;done" > $autostartfileinit
 			[ "$tmpdir" -a ! "$skipdownload" ] && echo -e "#!/bin/sh /etc/rc.common\n\nSTART=95\n\nstart() {\n\tcat > /tmp/download$1file.sh <<EOF\n[ ! -d /tmp/XiaomiSimpleInstallBox ] && mkdir -p /tmp/XiaomiSimpleInstallBox\ntrycount=0;while [ \\\$trycount -lt 3 -a ! -f /tmp/$1.tmp ];do curl --connect-timeout 3 -sLko /tmp/$1.tmp \"$url\";[ \\\$? = 0 ] && [ \\\$(wc -c < /tmp/$1.tmp) -lt 1024 ] && rm -f /tmp/$1.tmp;[ ! -f /tmp/$1.tmp ] && let trycount++;done\n[ -f /tmp/$1.tmp ] && {" > $downloadfileinit
 			[ "$1" = "qBittorrent" ] && {
 				while [ "$(pidof $2)" ];do killpid $(pidof $2 | awk '{print $1}');done
@@ -1008,7 +1008,7 @@ sda_install_remove(){
 			[ "$1" = "AdGuardHome" ] && {
 				while [ "$(pidof $2)" ];do killpid $(pidof $2 | awk '{print $1}');done
 				firewalllog "add" "$1" "wan${newdefineport}rdr1" "tcp" "1" "wan" "$newdefineport" "$newdefineport"
-				echo -e "\t$sdadir/$2 -w $sdadir &> /dev/null &" >> $autostartfileinit
+				echo -e "\t[ ! \"\$(uci -q get dhcp.@dnsmasq[0].port)\" -a \"\$(cat $sdadir/AdGuardHome.yaml | grep port: | grep -oE [0-9]{1,5} | tail -1)\" = \"53\" -o \"\$(uci -q get dhcp.@dnsmasq[0].port)\" = \"\$(cat $sdadir/AdGuardHome.yaml | grep port: | grep -oE [0-9]{1,5} | tail -1)\" ] && cp -f /etc/config/dhcp /etc/config/dhcp.backup && uci set dhcp.@dnsmasq[0].port=0 && uci commit && /etc/init.d/dnsmasq restart\n\t$sdadir/$2 -w $sdadir &> /dev/null &" >> $autostartfileinit
 				[ "$adguardhomednsport" != 53 ] && {
 					firewalllog "add" "$1" "lan53rdr3" "tcpudp" "1" "lan" "53" "$adguardhomednsport"
 					echo -e "\tip6tables -t nat -I PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports ${adguardhomednsport}\n\tip6tables -t nat -I PREROUTING -p udp --dport 53 -j REDIRECT --to-ports $adguardhomednsport" >> $autostartfileinit
@@ -1059,7 +1059,10 @@ sda_install_remove(){
 				[ "$tmpdir" -a ! "$skipdownload" ] && echo -e "\texport PATH=/data/unzip:\$PATH && unzip -P \"ikwjqensa%^!\" -oq /tmp/$1.tmp -d /tmp 2> /dev/null && mv -f /tmp/$2 /tmp/XiaomiSimpleInstallBox/$2" >> $downloadfileinit
 			}
 			echo -e "}\n\nstop() {\n\tservice_stop $sdadir/$2" >> $autostartfileinit
-			[ "$1" = "AdGuardHome" ] && [ "$adguardhomednsport" != 53 ] && echo -e "\tip6tables -t nat -D PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports ${adguardhomednsport}\n\tip6tables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-ports $adguardhomednsport" >> $autostartfileinit
+			[ "$1" = "AdGuardHome" ] && {
+				echo -e "\t[ -f /etc/config/dhcp.backup ] && mv -f /etc/config/dhcp.backup /etc/config/dhcp && /etc/init.d/dnsmasq restart" >> $autostartfileinit
+				[ "$adguardhomednsport" != 53 ] && echo -e "\tip6tables -t nat -D PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports ${adguardhomednsport}\n\tip6tables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-ports $adguardhomednsport" >> $autostartfileinit
+			}
 			[ "$1" = "zerotier" ] && {
 				echo -e "\tiptables -D FORWARD -o $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口出口\" -j ACCEPT 2> /dev/null\n\tiptables -D FORWARD -i $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口入口\" -j ACCEPT 2> /dev/null\n\tiptables -t nat -D POSTROUTING -o $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口出口钳制\" -j MASQUERADE 2> /dev/null" >> $autostartfileinit
 				while [ "$(pidof $2)" ];do killpid $(pidof $2 | awk '{print $1}');done
