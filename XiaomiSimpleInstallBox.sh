@@ -1,4 +1,4 @@
-version=v1.0.7q
+version=v1.0.7r
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=false
 export PATH=/data/unzip:$PATH
 hardware_release=$(cat /etc/openwrt_release 2> /dev/null | grep RELEASE | grep -oE [.0-9]{1,10})
@@ -607,7 +607,7 @@ sda_install_remove(){
 		}
 		[ "$1" = "etherwake" ] && rm -rf /data/etherwake && opkg remove etherwake &> /dev/null && sed -i '/网络唤醒/d' /etc/crontabs/root && /etc/init.d/cron restart &> /dev/null
 		[ "$1" = "docker" ] && {
-			rm -rf /lib/libblkid-tiny.so /lib/libubox.so.20230523 /lib/libubus.so.20230605 /lib/libblobmsg_json.so.20230523 /sbin/block /usr/lib/libjson-c.so.5 /usr/lib/libjson-c.so.5.2.0 /lib/upgrade/keep.d/block-mount  /usr/bin/containerd /usr/bin//usr/bin/containerd-shim /usr/bin/containerd-shim-runc-v2 /usr/bin/ctr /usr/bin/docker /usr/bin/docker-init /usr/bin/docker-proxy /usr/bin/dockerd /usr/bin/runc /usr/bin/swapoff /usr/bin/swapon /opt/containerd/ /run/blkid/ /run/containerd/ /run/docker/ && sed -i '/\/docker:$PATH/d' /etc/profile 2> /dev/null && sed -i '/./,/^$/!d' /etc/profile 2> /dev/null
+			rm -rf /lib/libblkid-tiny.so /lib/libubox.so.20230523 /lib/libubus.so.20230605 /lib/libblobmsg_json.so.20230523 /sbin/block /usr/lib/libjson-c.so.5 /usr/lib/libjson-c.so.5.2.0 /lib/upgrade/keep.d/block-mount  /usr/bin/containerd usr/bin/containerd-shim /usr/bin/containerd-shim-runc-v2 /usr/bin/ctr /usr/bin/docker /usr/bin/docker-init /usr/bin/docker-proxy /usr/bin/dockerd /usr/bin/runc /usr/bin/swapoff /usr/bin/swapon /opt/containerd/ /run/blkid/ /run/containerd/ /run/docker/ && sed -i '/\/docker:$PATH/d' /etc/profile 2> /dev/null && sed -i '/./,/^$/!d' /etc/profile 2> /dev/null
 			[ -f /etc/config/mi_docker.backup ] && mv -f /etc/config/mi_docker.backup /etc/config/mi_docker && log "恢复/etc/config/mi_docker.backup文件并改名为mi_docker"
 			[ -f /etc/init.d/mi_docker.backup ] && mv -f /etc/init.d/mi_docker.backup /etc/init.d/mi_docker && log "恢复/etc/init.d/mi_docker.backup文件并改名为mi_docker"
 			[ -f /etc/init.d/cgroup_init.backup ] && mv -f /etc/init.d/cgroup_init.backup /etc/init.d/cgroup_init && log "恢复/etc/init.d/cgroup_init.backup文件并改名为cgroup_init" && /etc/init.d/cgroup_init restart
@@ -887,7 +887,7 @@ sda_install_remove(){
 						firewalllog "add" "$1" "wan9000rdr1" "tcp" "1" "wan" "9000" "9000"
 						[ "$autorestore" ] && sed -i "/$1/d;/exit 0/i$sdadir/service_$1 restart &" /data/start_service_by_firewall
 						echo -e "\n$YELLOW$1$RESET 端口转发规则 $GREEN已全部更新$RESET，即将重启防火墙 ······" && sleep 2 && /etc/init.d/firewall restart &> /dev/null
-						echo -e "\n${YELLOW}Docker $GREEN安装并启动成功！$RESET" && $autostartfileinit enable && cp -pf $autostartfileinit $sdadir/service_$1
+						echo -e "\n${YELLOW}Docker $GREEN安装并启动成功！$RESET"
 						echo -e "\n$YELLOW若需要使用 ${PINK}docker $YELLOW等命令，请关闭本窗口并重新进入 SSH ！$RESET"
 						echo -e "\n管理页面地址：$SKYBLUE$hostip:9000$RESET"
 						ipv4=$(curl -m 3 -sLk v4.ident.me)
@@ -903,7 +903,7 @@ sda_install_remove(){
 			echo -e "\n$YELLOW压缩完成后$RESET请将文件重新放回到 $BLUE/tmp$RESET 目录下，并输入 ${YELLOW}1$RESET 进行继续"
 			while [ "$num" != 1 ];do echo -ne "\n";read -p "压缩完成后请输入 1 进行继续 > " num;done
 			if [ -f /tmp/$2 ];then
-				filesize=$(($(wc -c < /tmp/$2)+1048576)) && rm -f $sdadir/$2 && sleep 3
+				filesize=$(($(wc -c < /tmp/$2)+1048576)) && rm -f $sdadir/$2 && log "旧$1主程序文件已删除" && sleep 3
 				sdadiravailable=$(df | grep " ${sdadir%/*}$" | awk '{print $4}')
 				[ "$filesize" -gt "$(($sdadiravailable*1024))" ] && rm -f $sdadir/upxneeded && {
 					if [ "$filesize" -gt 1073741824 ];then
