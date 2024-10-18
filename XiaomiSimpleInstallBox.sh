@@ -1,5 +1,5 @@
-version=v1.0.7r
-RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=false
+version=v1.0.7s
+RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=true
 export PATH=/data/unzip:$PATH
 hardware_release=$(cat /etc/openwrt_release 2> /dev/null | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_target=$(cat /etc/openwrt_release 2> /dev/null | grep TARGET | awk -F / '{print $2}' | sed 's/_.*//')
@@ -1349,7 +1349,7 @@ main(){
 	}
 	case "$num" in
 		1)	sda_install_remove "qBittorrent" "qbittorrent-nox" "-v" "30MB" "c0re100" "qBittorrent-Enhanced-Edition" "rm -rf /.cache /.config /.local";;
-		2)	sda_install_remove "Alist" "alist" "version | grep v" "64MB" "alist-org" "alist";;
+		2)	sda_install_remove "Alist" "alist" "version | grep v" "64MB" "AlistGo" "alist";;
 		3)	sda_install_remove "AdGuardHome" "AdGuardHome" "--version" "30MB" "AdGuardTeam" "AdGuardHome";;
 		4)	sda_install_remove "aria2" "aria2.conf" "aria2c" "30KB";;
 		5)	sda_install_remove "vsftpd";;
