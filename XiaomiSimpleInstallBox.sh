@@ -1,5 +1,5 @@
 version=v1.0.7s
-RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=true
+RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=false
 export PATH=/data/unzip:$PATH
 hardware_release=$(cat /etc/openwrt_release 2> /dev/null | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_target=$(cat /etc/openwrt_release 2> /dev/null | grep TARGET | awk -F / '{print $2}' | sed 's/_.*//')
