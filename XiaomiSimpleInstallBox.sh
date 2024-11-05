@@ -1,4 +1,4 @@
-version=v1.0.7t
+version=v1.0.7u
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=false
 export PATH=/data/unzip:$PATH
 hardware_release=$(cat /etc/openwrt_release 2> /dev/null | grep RELEASE | grep -oE [.0-9]{1,10})
@@ -453,7 +453,7 @@ github_download(){
 		echo -e "\n尝试使用加速镜像 $SKYBLUE$MIRROR$RESET 下载"
 		http_code=$(curl --connect-timeout 3 -m 20 -w "%{http_code}" -#Lko /tmp/$1 "$MIRROR$2")
 		if [ $? = 0 -a $http_code = 200 ];then
-			url="$MIRROR$2" && break
+			break
 		else
 			rm -f /tmp/$1
 			echo -e "\n$RED下载失败！$RESET即将尝试使用下一个加速镜像进行尝试 ······" && sleep 2
@@ -462,6 +462,7 @@ github_download(){
 	[ -f /tmp/$1 ] && return 0 || return 1
 }
 firewalllog(){
+	ruleexist=""
 	[ "$1" = "add" ] && {
 		if [ "$5" = "1" ];then
 			uci -q set firewall.$3=redirect
@@ -487,10 +488,9 @@ firewalllog(){
 			uci -q set firewall.$3.src_dport=$7
 			uci -q commit && log "更新$2-$3端口转发规则到/etc/config/firewall文件中"
 		fi
-		echo -e "\n$YELLOW$2$RESET 端口转发规则 $PINK$2-$3$RESET $GREEN已更新$RESET ······" && sleep 1
+		echo -e "\n$YELLOW$2$RESET 端口转发规则 $PINK$2-$3$RESET $GREEN已更新$RESET ······" && sleep 1 && ruleexist=1
 	}
 	[ "$1" = "del" ] && {
-		ruleexist=""
 		while [ "$(uci show firewall | grep $2 | awk -F '.' '{print $2}' | head -1)" ];do
 			firewallrule=$(uci show firewall | grep $2 | awk -F '.' '{print $2}' | head -1)
 			uci -q del firewall.$firewallrule && uci -q commit && log "删除/etc/config/firewall文件中的端口转发规则$2-$firewallrule" && ruleexist=1
@@ -501,7 +501,7 @@ firewalllog(){
 }
 sda_install_remove(){
 	sdalist=$(df | sed -n '1!p' | grep -vE "rom|tmp|ini|overlay|sys|lib|docker_disk" | awk '{print $6}' | grep -vE '^/$|/userdisk/|/data/|/etc/')
-	autostartfileinit=/etc/init.d/$1 && autostartfilerc=/etc/rc.d/S95$1 && downloadfileinit=/etc/init.d/Download$1 && downloadfilerc=/etc/rc.d/S95Download$1 && tmpdir="" && old_tag="" && upxretry=0 && skipdownload="" && newuser="" && DNSINFO="" && adguardhomednsport=53
+	autostartfileinit=/etc/init.d/$1 && autostartfilerc=/etc/rc.d/S95$1 && downloadfileinit=/etc/init.d/Download$1 && downloadfilerc=/etc/rc.d/S95Download$1 && tmpdir="" && old_tag="" && upxretry=0 && skipdownload="" && newuser="" && DNSINFO="" && ruleexist=""
 	[ "$3" = "del" ] && del="true" || del=""
 	[ ! "$del" ] && {
 		[ ! "$8" ] && {
@@ -633,6 +633,8 @@ sda_install_remove(){
 			sdadir=$sdadir/homeassistant
 		}
 		[ "$sdadir" ] && rm -rf $sdadir && log "删除文件夹$sdadir"
+		[ -f /tmp/XiaomiSimpleInstallBox/$2 ] && rm -f /tmp/XiaomiSimpleInstallBox/$2
+		[ ! "$(ls /tmp/XiaomiSimpleInstallBox 2> /dev/null)" ] && rm -rf /tmp/XiaomiSimpleInstallBox
 		sed -i "/$1/d" /data/start_service_by_firewall &> /dev/null
 		echo -e "\n$YELLOW$1 $RED已一键删除！$RESET" && sleep 1 && main
 	}
@@ -933,6 +935,7 @@ sda_install_remove(){
 			fi
 		fi
 		[ ! "$skipdownload" ] && {
+			[ -f $autostartfileinit ] && $autostartfileinit stop &> /dev/null
 			while [ "$(pidof $2)" ];do killpid $(pidof $2 | awk '{print $1}');done
 			[ ! -d $sdadir ] && mkdir -p $sdadir && log "新建文件夹$sdadir"
 			[ "$tmpdir" -a ! -d $tmpdir ] && mkdir -p $tmpdir && log "新建文件夹$tmpdir"
@@ -946,6 +949,7 @@ sda_install_remove(){
 			fi
 		}
 		chmod 755 $sdadir/$2 $tmpdir/$2 &> /dev/null
+		[ -f $autostartfileinit ] && $autostartfileinit stop &> /dev/null
 		while [ "$(pidof $2)" ];do killpid $(pidof $2 | awk '{print $1}');done && firewalllog "del" "$1"
 		[ "$1" = "qBittorrent" ] && {
 			if [ -f $sdadir/qBittorrent_files/config/qBittorrent.conf ];then
@@ -977,21 +981,21 @@ sda_install_remove(){
 			}
 		}
 		[ "$1" = "AdGuardHome" ] && {
-			[ "$ruleexist" = 1 ] && echo -e "\n$YELLOW$1$RESET 端口转发规则 $RED已全部删除$RESET，即将重启防火墙 ······" && sleep 2 && /etc/init.d/firewall restart &> /dev/null
+			[ "$ruleexist" ] && echo -e "\n$YELLOW$1$RESET 端口转发规则 $RED已全部删除$RESET，即将重启防火墙 ······" && sleep 2 && /etc/init.d/firewall restart &> /dev/null
 			if [ -f $sdadir/AdGuardHome.yaml ];then
 				defineport=$(cat "$sdadir/AdGuardHome.yaml" | grep address | grep -oE [0-9]{1,5} | tail -1)
 				definednsport=$(cat "$sdadir/AdGuardHome.yaml" | grep port: | grep -oE [0-9]{1,5} | tail -1)
 				newdefineport=$defineport && newdnsport=$definednsport
 				while [ "$(netstat -lnWp | grep tcp | grep ":$newdefineport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdefineport++;sleep 1;done
 				sed -i "s/:$defineport$/:$newdefineport/" $sdadir/AdGuardHome.yaml
-				if [ "$newdnsport" = 53 ];then
+				if [ ! "$(uci -q get dhcp.@dnsmasq[0].port)" -a "$definednsport" = "53" -o "$(uci -q get dhcp.@dnsmasq[0].port)" = "$definednsport" ];then
 					[ ! -f /etc/config/dhcp.backup ] && cp -f /etc/config/dhcp /etc/config/dhcp.backup && log "备份/etc/config/dhcp文件并改名为dhcp.backup"
-					[ ! "$(uci -q get dhcp.@dnsmasq[0].port)" -o "$(uci -q get dhcp.@dnsmasq[0].port)" = 53 ] && uci -q set dhcp.@dnsmasq[0].port=0 && uci -q commit && /etc/init.d/dnsmasq restart &> /dev/null && log "修改/etc/config/dhcp文件中的选项：dnsmasq.port改为0（关闭dnsmasq的DNS服务）"
+					uci -q set dhcp.@dnsmasq[0].port=0 && uci -q commit && /etc/init.d/dnsmasq restart &> /dev/null && log "修改/etc/config/dhcp文件中的选项：dnsmasq.port改为0（关闭dnsmasq的DNS服务）"
 				else
 					while [ "$(netstat -lnWp | grep ":$newdnsport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdnsport++;sleep 1;done
 					sed -i "s/: $definednsport$/: $newdnsport/" $sdadir/AdGuardHome.yaml
-					adguardhomednsport=$newdnsport && DNSINFO="，${RED}DNS$RESET 监听端口为：$YELLOW$adguardhomednsport$RESET"
 				fi
+				adguardhomednsport=$newdnsport && [ "$adguardhomednsport" != 53 ] && DNSINFO="，${RED}DNS$RESET 监听端口为：$YELLOW$adguardhomednsport$RESET"
 			else
 				echo -e "\n$YELLOW检测到本次是首次安装$RESET！请先设置 ${PINK}DNS 监听端口$RESET！" && num=""
 				while [ ! "$num" ];do
@@ -1010,7 +1014,7 @@ sda_install_remove(){
 					process=$(netstat -lnWp | grep ":$num " | awk '{print $NF}' | sed 's/.*\///' | head -1) && dnsnum=""
 					[ "$process" ] && {
 						if [ "$process" = "dnsmasq" ];then
-							echo -e "\n$RED使用 ${PINK}53 $RED端口需要禁用本机自带的 ${YELLOW}dnsmasq $RED的 DNS 服务，确认禁用吗？$RESET"
+							echo -e "\n$RED使用 ${PINK}$num $RED端口需要禁用本机自带的 ${YELLOW}dnsmasq $RED的 DNS 服务，确认禁用吗？$RESET"
 							while [ ! "$dnsnum" ];do
 								echo -ne "\n"
 								read -p "确认请输入 1 ，返回修改请输入 0 > " dnsnum
@@ -1027,10 +1031,12 @@ sda_install_remove(){
 						fi
 					}
 				done
-				[ "$num" != 53 ] && adguardhomednsport=$num && DNSINFO="，${RED}DNS$RESET 监听端口为：$YELLOW$adguardhomednsport$RESET"
+				adguardhomednsport=$num && [ "$adguardhomednsport" != 53 ] && DNSINFO="，${RED}DNS$RESET 监听端口为：$YELLOW$adguardhomednsport$RESET"
 				newdefineport=3000 && while [ "$(netstat -lnWp | grep tcp | grep ":$newdefineport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdefineport++;sleep 1;done
-				echo -e "http:\n  pprof:\n    port: 6060\n    enabled: false\n  address: 0.0.0.0:$newdefineport\n  session_ttl: 720h" > $sdadir/AdGuardHome.yaml
-				echo -e "dns:\n  port: $num\n  upstream_dns:\n    - 223.6.6.6" >> $sdadir/AdGuardHome.yaml
+				{
+					echo -e "http:\n  pprof:\n    port: 6060\n    enabled: false\n  address: 0.0.0.0:$newdefineport\n  session_ttl: 720h"
+					echo -e "dns:\n  port: $num\n  upstream_dns:\n    - 223.6.6.6"
+				} > $sdadir/AdGuardHome.yaml
 			fi
 			$sdadir/$2 -w $sdadir &> /dev/null &
 		}
@@ -1058,9 +1064,9 @@ sda_install_remove(){
 				echo -e "\nstart() {\n\texistedpid=\$(ps | grep -v grep | grep $2 | awk '{print \$1}');for pid in \$existedpid;do [ \$pid != \$\$ ] && killpid \$pid;done"
 			} > $autostartfileinit
 			[ "$tmpdir" -a ! "$skipdownload" ] && {
-				echo -e "#!/bin/sh /etc/rc.common\n\nSTART=95"
+				echo -e "#!/bin/sh /etc/rc.common\n\nSTART=95\n\nMIRRORS=\"$(echo $MIRRORS)\"\n\ngithubdownload() {\n\tfor MIRROR in \$MIRRORS;do\n\t\trm -f \$1 && failedcount=0 && http_code=0 && dlurl=\$3 && [ \"\$(echo \$dlurl | grep -vE '/http|=http' | grep -E 'github.com/|githubusercontent.com/')\" ] && dlurl=\"\$(echo \$dlurl | sed \"s#.*#\$(echo \$MIRROR | sed 's/[^/]\$/&\\\//')&#\")\"\n\t\techo -e \"\\\n\\\e[1;33m下载\$2 \$SKYBLUE\$dlurl \\\e[1;33m······\\\e[0m \\\c\"\n\t\thttp_code=\$(curl -m 10 -sLko \$1 \"\$dlurl\" -w \"%{http_code}\")\n\t\twhile [ \$? != 0 -a \$failedcount -lt 3 -o \$http_code != 200 -a \$failedcount -lt 3 ];do\n\t\t\trm -f \$1 && echo -e \"\\\e[0;31m下载失败！即将尝试重新下载！已重试次数：\$failedcount\\\e[0m\" && sleep 1 && let failedcount++\n\t\t\techo -e \"\\\n\\\e[1;33m下载\$2 \$SKYBLUE\$dlurl \\\e[1;33m······\\\e[0m \\\c\" && http_code=\$(curl -m 10 -sLko \$1 \"\$dlurl\" -w \"%{http_code}\")\n\t\tdone\t\t\n\t\t[ \$? = 0 -a \$http_code = 200 ] && echo -e \"\\\e[1;32m下载成功！\\\e[0m\" && break && return 0\n\tdone\n\treturn 1\n}"
 				[ "$autorestore" ] && echo -e "\nwhile [ \"\$(cat /proc/xiaoqiang/boot_status)\" != 3 ];do sleep 1;done\n[ -f $sdadir/$2 ] && exit"
-				echo -e "\nstart() {\n\tcat > /tmp/download$1file.sh <<EOF\n[ ! -d /tmp/XiaomiSimpleInstallBox ] && mkdir -p /tmp/XiaomiSimpleInstallBox\ntrycount=0;while [ \\\$trycount -lt 3 -a ! -f /tmp/$1.tmp ];do curl --connect-timeout 3 -sLko /tmp/$1.tmp \"$url\";[ \\\$? = 0 ] && [ \\\$(wc -c < /tmp/$1.tmp) -lt 1024 ] && rm -f /tmp/$1.tmp;[ ! -f /tmp/$1.tmp ] && let trycount++;done\n[ -f /tmp/$1.tmp ] && {"
+				echo -e "\nstart() {\n\tgithubdownload \"/tmp/$1.tmp\" \"$2\" \"$url\"\n\t[ -f /tmp/$1.tmp ] && {\n\t\t[ ! -d /tmp/XiaomiSimpleInstallBox ] && mkdir -p /tmp/XiaomiSimpleInstallBox"
 			} > $downloadfileinit
 			[ "$1" = "qBittorrent" ] && {
 				while [ "$(pidof $2)" ];do killpid $(pidof $2 | awk '{print $1}');done
@@ -1069,30 +1075,24 @@ sda_install_remove(){
 				firewalllog "add" "$1" "wan${newtrackerport}rdr3" "tcpudp" "1" "wan" "$newtrackerport" "$newtrackerport"
 				firewalllog "add" "$1" "wan${newdefineport}rdr1" "tcp" "1" "wan" "$newdefineport" "$newdefineport"
 				echo -e "\t$sdadir/$2 --webui-port=$newdefineport --profile=$sdadir --configuration=files -d" >> $autostartfileinit
-				[ "$tmpdir" -a ! "$skipdownload" ] && echo -e "\texport PATH=/data/unzip:\$PATH && unzip -oq /tmp/$1.tmp -d /tmp && mv -f /tmp/$2 /tmp/XiaomiSimpleInstallBox/$2" >> $downloadfileinit
+				[ "$tmpdir" -a ! "$skipdownload" ] && echo -e "\t\texport PATH=/data/unzip:\$PATH && unzip -oq /tmp/$1.tmp -d /tmp && mv -f /tmp/$2 /tmp/XiaomiSimpleInstallBox/$2" >> $downloadfileinit
 			}
 			[ "$1" = "Alist" ] && {
 				[ -f $sdadir/.unadmin ] && sleep 5 && $sdadir/$2 admin set 12345678 --data $sdadir/data &> /dev/null && rm -f $sdadir/.unadmin
 				firewalllog "add" "$1" "wan${newdefineport}rdr1" "tcp" "1" "wan" "$newdefineport" "$newdefineport"
 				echo -e "\trm -f $sdadir/daemon/pid $tmpdir/daemon/pid\n\t$sdadir/$2 start --data $sdadir/data" >> $autostartfileinit
-				[ "$tmpdir" -a ! "$skipdownload" ] && echo -e "\ttar -zxf /tmp/$1.tmp -C /tmp && mv -f /tmp/$2 /tmp/XiaomiSimpleInstallBox/$2" >> $downloadfileinit
+				[ "$tmpdir" -a ! "$skipdownload" ] && echo -e "\t\ttar -zxf /tmp/$1.tmp -C /tmp && mv -f /tmp/$2 /tmp/XiaomiSimpleInstallBox/$2" >> $downloadfileinit
 			}
 			[ "$1" = "AdGuardHome" ] && {
 				while [ "$(pidof $2)" ];do killpid $(pidof $2 | awk '{print $1}');done
 				echo -e "\t[ ! \"\$(uci -q get dhcp.@dnsmasq[0].port)\" -a \"\$(cat $sdadir/AdGuardHome.yaml | grep port: | grep -oE [0-9]{1,5} | tail -1)\" = \"53\" -o \"\$(uci -q get dhcp.@dnsmasq[0].port)\" = \"\$(cat $sdadir/AdGuardHome.yaml | grep port: | grep -oE [0-9]{1,5} | tail -1)\" ] && {\n\t\t[ ! -f /etc/config/dhcp.backup ] && cp -f /etc/config/dhcp /etc/config/dhcp.backup\n\t\tuci set dhcp.@dnsmasq[0].port=0\n\t\t[ ! \"\$(uci -q get dhcp.lan.dhcp_option | grep 6,)\" ] && uci add_list dhcp.lan.dhcp_option=6,\$(uci get network.lan.ipaddr)\n\t\tuci commit && /etc/init.d/dnsmasq restart &> /dev/null\n\t}\n\t$sdadir/$2 -w $sdadir &> /dev/null &" >> $autostartfileinit
-				[ "$adguardhomednsport" != 53 ] && {
-					firewalllog "add" "$1" "lan53rdr3" "tcpudp" "1" "lan" "53" "$adguardhomednsport"
-					echo -e "\tip6tables -t nat -I PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports ${adguardhomednsport}\n\tip6tables -t nat -I PREROUTING -p udp --dport 53 -j REDIRECT --to-ports $adguardhomednsport" >> $autostartfileinit
-				}
+				[ "$adguardhomednsport" != 53 ] && echo -e "\techo -e \"for pid in \\\$(ps | grep $2_DNS_check | awk '{print \\\$1}');do [ \\\"\\\$pid\\\" != \\\"\\\$\\\$\\\" ] && killpid \\\$pid;done\\\nwhile [ \\\"\\\$(pidof $2)\\\" ];do\\\n\\\tdnsport=\\\$(cat $sdadir/$2.yaml | grep port: | grep -oE [0-9]{1,5} | tail -1)\\\n\\\t[ \\\"\\\$dnsport\\\" ] && {\\\n\\\t\\\t[ ! \\\"\\\$(iptables -t nat -S OUTPUT | grep \\\"$2 DNS.*\\\$dnsport\\\$\\\")\\\" ] && {\\\n\\\t\\\t\\\tiptables -t nat -S OUTPUT | grep '$2 DNS' | while read LINE;do eval iptables -t nat \\\$(echo \\\$LINE | sed 's/-A/-D/');done\\\n\\\t\\\t\\\tiptables -t nat -I OUTPUT -s 127.0.0.0/8 -p tcp --dport 53 -m comment --comment \\\"$2 DNS端口转发规则\\\" -j REDIRECT --to-ports \\\$dnsport\\\n\\\t\\\t\\\tiptables -t nat -I OUTPUT -s 127.0.0.0/8 -p udp --dport 53 -m comment --comment \\\"$2 DNS端口转发规则\\\" -j REDIRECT --to-ports \\\$dnsport\\\n\\\t\\\t}\\\n\\\t\\\t[ ! \\\"\\\$(iptables -t nat -S PREROUTING | grep \\\"$2 DNS.*\\\$dnsport\\\$\\\")\\\" -o ! \\\"\\\$local_ipv4_dns_route\\\" = \\\"\\\$(ip route | grep br-lan | awk {'print \\\$9'})\\\" ] && {\\\n\\\t\\\t\\\tlocal_ipv4_dns_route=\\\$(ip route | grep br-lan | awk {'print \\\$9'})\\\n\\\t\\\t\\\tiptables -t nat -S PREROUTING | grep '$2 DNS' | while read LINE;do eval iptables -t nat \\\$(echo \\\$LINE | sed 's/-A/-D/');done\\\n\\\t\\\t\\\tiptables -t nat -I PREROUTING -d \\\$local_ipv4_dns_route -p tcp --dport 53 -m comment --comment \\\"$2 DNS端口转发规则\\\" -j REDIRECT --to-ports \\\$dnsport\\\n\\\t\\\t\\\tiptables -t nat -I PREROUTING -d \\\$local_ipv4_dns_route -p udp --dport 53 -m comment --comment \\\"$2 DNS端口转发规则\\\" -j REDIRECT --to-ports \\\$dnsport\\\n\\\t\\\t}\\\n\\\t\\\t[ \\\"\\\$(ip -6 route | grep br-lan | awk '{print \\\$1}')\\\" ] && {\\\n\\\t\\\t\\\t[ ! \\\"\\\$(ip6tables -t nat -S OUTPUT | grep \\\"$2 DNS.*\\\$dnsport\\\$\\\")\\\" ] && {\\\n\\\t\\\t\\\t\\\tip6tables -t nat -S OUTPUT | grep '$2 DNS' | while read LINE;do eval ip6tables -t nat \\\$(echo \\\$LINE | sed 's/-A/-D/');done\\\n\\\t\\\t\\\t\\\tip6tables -t nat -I OUTPUT -s ::1 -p tcp --dport 53 -m comment --comment \\\"$2 DNS端口转发规则\\\" -j REDIRECT --to-ports \\\$dnsport\\\n\\\t\\\t\\\t\\\tip6tables -t nat -I OUTPUT -s ::1 -p udp --dport 53 -m comment --comment \\\"$2 DNS端口转发规则\\\" -j REDIRECT --to-ports \\\$dnsport\\\n\\\t\\\t\\\t}\\\n\\\t\\\t\\\t[ ! \\\"\\\$(ip6tables -t nat -S PREROUTING | grep \\\"$2 DNS.*\\\$dnsport\\\$\\\")\\\" -o ! \\\"\\\$local_ipv6_dns_route\\\" = \\\"\\\$(route -A inet6 | grep '^fe80.*[0-9a-f]/128.*Un' | awk '{print \\\$1}')\\\" ] && {\\\n\\\t\\\t\\\t\\\tlocal_ipv6_dns_route=\\\$(route -A inet6 | grep '^fe80.*[0-9a-f]/128.*Un' | awk '{print \\\$1}')\\\n\\\t\\\t\\\t\\\tip6tables -t nat -S PREROUTING | grep '$2 DNS' | while read LINE;do eval ip6tables -t nat \\\$(echo \\\$LINE | sed 's/-A/-D/');done\\\n\\\t\\\t\\\t\\\tfor localipv6dns in \\\$(route -A inet6 | grep '^fe80.*[0-9a-f]/128.*Un' | awk '{print \\\$1}');do\\\n\\\t\\\t\\\t\\\t\\\tip6tables -t nat -I PREROUTING -d \\\$localipv6dns -p tcp --dport 53 -m comment --comment \\\"$2 DNS端口转发规则\\\" -j REDIRECT --to-ports \\\$dnsport\\\n\\\t\\\t\\\t\\\t\\\tip6tables -t nat -I PREROUTING -d \\\$localipv6dns -p udp --dport 53 -m comment --comment \\\"$2 DNS端口转发规则\\\" -j REDIRECT --to-ports \\\$dnsport\\\n\\\t\\\t\\\t\\\tdone\\\n\\\t\\\t\\\t}\\\n\\\t\\\t}\\\n\\\t}\\\n\\\tsleep 10\\\ndone\\\niptables -t nat -S | grep '$2 DNS' | while read LINE;do eval iptables -t nat \\\$(echo \\\$LINE | sed 's/-A/-D/');done\\\nip6tables -t nat -S | grep '$2 DNS' | while read LINE;do eval ip6tables -t nat \\\$(echo \\\$LINE | sed 's/-A/-D/');done;rm -f \\\$0\" > /tmp/$2_DNS_check && chmod 755 /tmp/$2_DNS_check && /tmp/$2_DNS_check &" >> $autostartfileinit || echo -e "\techo -e \"for pid in \\\$(ps | grep $2_STATE_check | awk '{print \\\$1}');do [ \\\"\\\$pid\\\" != \\\"\\\$\\\$\\\" ] && killpid \\\$pid;done\\\nwhile [ \\\"\\\$(pidof $2)\\\" ];do sleep 1;done\\\nmv -f /etc/config/dhcp.backup /etc/config/dhcp 2> /dev/null && /etc/init.d/dnsmasq restart &> /dev/null;rm -f \\\$0\" > /tmp/$2_STATE_check && chmod 755 /tmp/$2_STATE_check && /tmp/$2_STATE_check &" >> $autostartfileinit
 				[ "$tmpdir" -a ! "$skipdownload" ] && {
-					echo -e "\ttar -zxf /tmp/$1.tmp -C /tmp && mv -f /tmp/$1 /tmp/$1.dir && mv -f /tmp/$1.dir/$2 /tmp/XiaomiSimpleInstallBox/$2 && rm -rf /tmp/$1.dir" >> $downloadfileinit
-					if [ "$adguardhomednsport" = 53 ];then
-						sed -i '/EOF/amv -f /etc/config/dhcp.backup /etc/config/dhcp && /etc/init.d/dnsmasq restart &> /dev/null' $downloadfileinit
-						echo -e "\tcp -f /etc/config/dhcp /etc/config/dhcp.backup\nuci -q set dhcp.@dnsmasq[0].port=0 && uci -q commit && /etc/init.d/dnsmasq restart &> /dev/null" >> $downloadfileinit
-					else
-						sed -i '/EOF/auci -q del firewall.lan53rdr3 && uci -q commit && /etc/init.d/firewall restart' $downloadfileinit
-						echo -e "\tuci -q set firewall.lan53rdr3=redirect && uci -q set firewall.lan53rdr3.name=$1-lan53rdr3 && uci -q set firewall.lan53rdr3.proto=tcpudp && uci -q set firewall.lan53rdr3.ftype=1 && uci -q set firewall.lan53rdr3.dest_ip=\$(uci -q get network.lan.ipaddr) && uci -q set firewall.lan53rdr3.src=lan && uci -q set firewall.lan53rdr3.dest=lan && uci -q set firewall.lan53rdr3.target=DNAT && uci -q set firewall.lan53rdr3.src_dport=53 && uci -q set firewall.lan53rdr3.dest_port=$adguardhomednsport && uci -q commit && /etc/init.d/firewall restart" >> $downloadfileinit
-					fi
+					echo -e "\t\ttar -zxf /tmp/$1.tmp -C /tmp && mv -f /tmp/$1 /tmp/$1.dir && mv -f /tmp/$1.dir/$2 /tmp/XiaomiSimpleInstallBox/$2 && rm -rf /tmp/$1.dir" >> $downloadfileinit
+					[ "$(uci -q get dhcp.@dnsmasq[0].port)" = 0 ] && {
+						sed -i '/start()/a\\tmv -f /etc/config/dhcp.backup /etc/config/dhcp && /etc/init.d/dnsmasq restart &> /dev/null' $downloadfileinit
+						echo -e "\t\tcp -f /etc/config/dhcp /etc/config/dhcp.backup\nuci -q set dhcp.@dnsmasq[0].port=0 && uci -q commit && /etc/init.d/dnsmasq restart &> /dev/null" >> $downloadfileinit
+					}
 				}
 			}
 			[ "$1" = "zerotier" ] && {
@@ -1127,13 +1127,10 @@ sda_install_remove(){
 				}
 				while [ ! "$(ifconfig | awk '{print $1}' | grep ^zt)" ];do sleep 1;done
 				echo -e "\t$sdadir/$2 -d $sdadir -p$newdefineport\n\tiptables -I FORWARD -o $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口出口\" -j ACCEPT 2> /dev/null\n\tiptables -I FORWARD -i $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口入口\" -j ACCEPT 2> /dev/null\n\tiptables -t nat -I POSTROUTING -o $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口出口钳制\" -j MASQUERADE 2> /dev/null\n\tip6tables -I FORWARD -o $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口出口\" -j ACCEPT 2> /dev/null\n\tip6tables -I FORWARD -i $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口入口\" -j ACCEPT 2> /dev/null\n\tip6tables -t nat -I POSTROUTING -o $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口出口钳制\" -j MASQUERADE 2> /dev/null" >> $autostartfileinit
-				[ "$tmpdir" -a ! "$skipdownload" ] && echo -e "\texport PATH=/data/unzip:\$PATH && unzip -P \"ikwjqensa%^!\" -oq /tmp/$1.tmp -d /tmp 2> /dev/null && mv -f /tmp/$2 /tmp/XiaomiSimpleInstallBox/$2" >> $downloadfileinit
+				[ "$tmpdir" -a ! "$skipdownload" ] && echo -e "\t\texport PATH=/data/unzip:\$PATH && unzip -P \"ikwjqensa%^!\" -oq /tmp/$1.tmp -d /tmp 2> /dev/null && mv -f /tmp/$2 /tmp/XiaomiSimpleInstallBox/$2" >> $downloadfileinit
 			}
 			echo -e "}\n\nstop() {\n\tservice_stop $sdadir/$2" >> $autostartfileinit
-			[ "$1" = "AdGuardHome" ] && {
-				echo -e "\t[ -f /etc/config/dhcp.backup ] && mv -f /etc/config/dhcp.backup /etc/config/dhcp && /etc/init.d/dnsmasq restart &> /dev/null" >> $autostartfileinit
-				[ "$adguardhomednsport" != 53 ] && echo -e "\tip6tables -t nat -D PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports ${adguardhomednsport}\n\tip6tables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-ports $adguardhomednsport" >> $autostartfileinit
-			}
+			[ "$1" = "AdGuardHome" ] && echo -e "\t[ -f /etc/config/dhcp.backup ] && mv -f /etc/config/dhcp.backup /etc/config/dhcp && /etc/init.d/dnsmasq restart &> /dev/null" >> $autostartfileinit
 			[ "$1" = "zerotier" ] && {
 				echo -e "\tiptables -D FORWARD -o $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口出口\" -j ACCEPT 2> /dev/null\n\tiptables -D FORWARD -i $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口入口\" -j ACCEPT 2> /dev/null\n\tiptables -t nat -D POSTROUTING -o $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口出口钳制\" -j MASQUERADE 2> /dev/null\n\tip6tables -D FORWARD -o $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口出口\" -j ACCEPT 2> /dev/null\n\tip6tables -D FORWARD -i $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口入口\" -j ACCEPT 2> /dev/null\n\tip6tables -t nat -D POSTROUTING -o $(ifconfig | awk '{print $1}' | grep ^zt) -m comment --comment \"ZeroTier 内网穿透网口出口钳制\" -j MASQUERADE 2> /dev/null" >> $autostartfileinit
 				while [ "$(pidof $2)" ];do killpid $(pidof $2 | awk '{print $1}');done
@@ -1144,12 +1141,12 @@ sda_install_remove(){
 			ln -sf $autostartfileinit $autostartfilerc && chmod 755 $autostartfilerc && cp -pf $autostartfileinit $sdadir/service_$1 && $autostartfileinit restart &> /dev/null
 			[ "$autorestore" ] && sed -i "/$1/d;/exit 0/i$sdadir/service_$1 restart &" /data/start_service_by_firewall
 			[ "$tmpdir" -a ! "$skipdownload" ] && {
-				echo -e "\trm -f /tmp/$1.tmp\n\tchmod 755 /tmp/XiaomiSimpleInstallBox/$2\n\t$sdadir/service_$1 start &> /dev/null\n}\nrm -f /tmp/download$1file.sh\nEOF\n\tchmod 755 /tmp/download$1file.sh\n\t/tmp/download$1file.sh &\n}" >> $downloadfileinit && chmod 755 $downloadfileinit && log "新建自启动文件$downloadfileinit"
+				echo -e "\t\trm -f /tmp/$1.tmp\n\t\tchmod 755 /tmp/XiaomiSimpleInstallBox/$2\n\t\t$sdadir/service_$1 start &> /dev/null &\n\t}\n}" >> $downloadfileinit && chmod 755 $downloadfileinit && log "新建自启动文件$downloadfileinit"
 				ln -sf $downloadfileinit $downloadfilerc && chmod 755 $downloadfilerc && cp -pf $downloadfileinit $sdadir/service_Download$1 && /etc/init.d/$1 disable
 			}
 			[ "$autorestore" ] && [ "$tmpdir" ] && sed -i "/$1/d;/exit 0/i$sdadir/service_Download$1 start &" /data/start_service_by_firewall
 			if [ "$1" != "zerotier" ];then
-				echo -e "\n$YELLOW$1$RESET 端口转发规则 $GREEN已全部更新$RESET，即将重启防火墙 ······" && sleep 2 && /etc/init.d/firewall restart &> /dev/null
+				[ "$ruleexist" ] && echo -e "\n$YELLOW$1$RESET 端口转发规则 $GREEN已全部更新$RESET，即将重启防火墙 ······" && sleep 2 && /etc/init.d/firewall restart &> /dev/null
 				echo -e "\n${YELLOW}$1 $PINK$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/') $GREEN已运行$RESET并设置为$YELLOW开机自启动！$RESET"
 				echo -e "\n管理页面地址：$SKYBLUE$hostip:$newdefineport$RESET$DNSINFO"
 				[ "$1" != "AdGuardHome" ] && {
@@ -1167,7 +1164,7 @@ sda_install_remove(){
 			[ -L $autostartfilerc ] && rm -f $autostartfilerc
 			[ -f $downloadfileinit ] && rm -f $downloadfileinit $sdadir/service_Download$1 && log "删除自启动文件$downloadfileinit"
 			[ -L $downloadfilerc ] && rm -f $downloadfilerc
-			[ "$1" = "AdGuardHome" -a "$adguardhomednsport" = 53 ] && mv -f /etc/config/dhcp.backup /etc/config/dhcp && /etc/init.d/dnsmasq restart &> /dev/null && log "恢复/etc/config/dhcp.backup文件并改名为dhcp"
+			[ "$1" = "AdGuardHome" -a "$(uci -q get dhcp.@dnsmasq[0].port)" = 0 ] && mv -f /etc/config/dhcp.backup /etc/config/dhcp 2> /dev/null && /etc/init.d/dnsmasq restart &> /dev/null && log "恢复/etc/config/dhcp.backup文件并改名为dhcp"
 		fi
 	else
 		echo -e "\n$PINK请输入 $1 的下载默认保存路径：$RESET"
@@ -1261,7 +1258,7 @@ sda_install_remove(){
 				firewalllog "add" "$1" "wan${newdefineport}rdr1" "tcp" "1" "wan" "$newdefineport" "$newdefineport"
 			}
 			[ "$autorestore" ] && sed -i "/$1/d;/exit 0/i$sdadir/service_$1 restart &" /data/start_service_by_firewall
-			echo -e "\n$YELLOW$1$RESET 端口转发规则 $GREEN已全部更新$RESET，即将重启防火墙 ······" && sleep 2 && /etc/init.d/firewall restart &> /dev/null
+			[ "$ruleexist=" ] && echo -e "\n$YELLOW$1$RESET 端口转发规则 $GREEN已全部更新$RESET，即将重启防火墙 ······" && sleep 2 && /etc/init.d/firewall restart &> /dev/null
 			echo -e "\n${YELLOW}$1 $GREEN已运行$RESET并设置为$YELLOW开机自启动！$RESET"
 			[ "$1" = "aria2" ] && echo -e "\n管理页面地址：$SKYBLUE$hostip$webui$RESET"
 			[ "$1" = "transmission" ] && echo -e "\n管理页面地址：$SKYBLUE$hostip:$newdefineport$RESET"
