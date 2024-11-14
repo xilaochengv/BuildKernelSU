@@ -1,4 +1,4 @@
-version=v1.0.7u
+version=v1.0.7v
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=false
 export PATH=/data/unzip:$PATH
 hardware_release=$(cat /etc/openwrt_release 2> /dev/null | grep RELEASE | grep -oE [.0-9]{1,10})
@@ -929,7 +929,6 @@ sda_install_remove(){
 					fi
 					echo -e "\n主程序文件大小 $PINK$filesize$RESET （预留 ${YELLOW}1 MB$RESET 空间），所选目录可用空间 $RED$sdadiravailable ，空间不足，无法安装！$RESET" && sleep 1 && sda_install_remove "$1" "$2" "$3" "$4" "$5" "$6" "$7" "return"
 				}
-				touch $sdadir/upxneeded
 			else
 				echo -e "\n$BLUE/tmp/$2$RESET 文件$RED不存在！$RESET" && sleep 1 && main
 			fi
@@ -940,6 +939,7 @@ sda_install_remove(){
 			[ ! -d $sdadir ] && mkdir -p $sdadir && log "新建文件夹$sdadir"
 			[ "$tmpdir" -a ! -d $tmpdir ] && mkdir -p $tmpdir && log "新建文件夹$tmpdir"
 			if [ ! "$tmpdir" ];then
+				[ "$upxneeded" = 1 ] && touch $sdadir/upxneeded
 				[ -f $sdadir/$2 ] && rm -f $sdadir/$2 && log "旧$1主程序文件已删除"
 				mv -f /tmp/$2 $sdadir/$2 && log "$1主程序文件$2已安装到$sdadir文件夹中"
 			else
@@ -1356,7 +1356,7 @@ main(){
 	case "$num" in
 		1)	sda_install_remove "qBittorrent" "qbittorrent-nox" "-v" "30MB" "c0re100" "qBittorrent-Enhanced-Edition" "rm -rf /.cache /.config /.local";;
 		2)	sda_install_remove "Alist" "alist" "version | grep v" "64MB" "AlistGo" "alist";;
-		3)	sda_install_remove "AdGuardHome" "AdGuardHome" "--version" "30MB" "AdGuardTeam" "AdGuardHome";;
+		3)	sda_install_remove "AdGuardHome" "AdGuardHome" "--version" "300MB" "AdGuardTeam" "AdGuardHome";;
 		4)	sda_install_remove "aria2" "aria2.conf" "aria2c" "30KB";;
 		5)	sda_install_remove "vsftpd";;
 		6)	sda_install_remove "transmission" "settings.json" "transmission-daemon" "5KB";;
