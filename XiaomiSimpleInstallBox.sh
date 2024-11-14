@@ -1356,7 +1356,7 @@ main(){
 	case "$num" in
 		1)	sda_install_remove "qBittorrent" "qbittorrent-nox" "-v" "30MB" "c0re100" "qBittorrent-Enhanced-Edition" "rm -rf /.cache /.config /.local";;
 		2)	sda_install_remove "Alist" "alist" "version | grep v" "64MB" "AlistGo" "alist";;
-		3)	sda_install_remove "AdGuardHome" "AdGuardHome" "--version" "300MB" "AdGuardTeam" "AdGuardHome";;
+		3)	sda_install_remove "AdGuardHome" "AdGuardHome" "--version" "30MB" "AdGuardTeam" "AdGuardHome";;
 		4)	sda_install_remove "aria2" "aria2.conf" "aria2c" "30KB";;
 		5)	sda_install_remove "vsftpd";;
 		6)	sda_install_remove "transmission" "settings.json" "transmission-daemon" "5KB";;
