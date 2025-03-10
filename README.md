@@ -1,5 +1,3 @@
-视频教程地址：https://www.bilibili.com/video/BV1Mz4y1A7Zm/
-
 # 给作者加鸡腿：
 微信：
 ![微信](/%E5%BE%AE%E4%BF%A1.png)
