@@ -1,4 +1,4 @@
-version=v1.0.7x
+version=v1.0.7y
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=true
 export PATH=/data/unzip:$PATH
 hardware_release=$(cat /etc/openwrt_release 2> /dev/null | grep RELEASE | grep -oE [.0-9]{1,10})
@@ -9,7 +9,6 @@ wanifname=$(uci get network.wan.ifname 2> /dev/null)
 [ -d /usr/share/xiaoqiang -a "$(uname -m)" = "aarch64" ] && miAARCH64=true
 [ "$(df | grep -E '/data/etc/config|/etc/config')" ] && autorestore=true
 MIRRORS="
-https://ghp.ci/
 https://ghproxy.net/
 https://gh-proxy.com/
 https://github.moeyy.xyz/
@@ -102,7 +101,7 @@ opkg_test_install(){
 						mv -f /tmp/$1/etc/init.d/transmission $sdadir/service_transmission
 						mv -f /tmp/$1/usr/bin/transmission-daemon $sdadir/transmission-daemon
 						[ $? != 0 ] && echo -e "\n$BLUE$sdadir $RED文件夹空间不足，安装失败！$RESET" && rm -rf /tmp/$1 /tmp/$1.ipk $sdadir && sleep 2 && main
-						sed -i "/PROG=/a\\\nwhile [ \"\$(cat /proc/xiaoqiang/boot_status)\" != 3 ];do sleep 1;done\nln -sf $sdadir/service_transmission /etc/init.d/transmission\nln -sf $sdadir/config/transmission /etc/config/transmission\nln -sf $sdadir/transmission-daemon /usr/bin/transmission-daemon" $sdadir/service_transmission
+						sed -i "/PROG=/a\\\nwhile [ \"\$(cat /proc/xiaoqiang/boot_status)\" != 3 -o ! \"\$(curl -m 1 -w \"%{http_code}\" -so /dev/null baidu.com)\" = 200 ];do sleep 1;done\nln -sf $sdadir/service_transmission /etc/init.d/transmission\nln -sf $sdadir/config/transmission /etc/config/transmission\nln -sf $sdadir/transmission-daemon /usr/bin/transmission-daemon" $sdadir/service_transmission
 						sed -i "/start_service()/a\\\tfor lib in \$(ls -l $sdadir | awk '{print \$NF}' | grep ^lib);do ln -sf $sdadir/\$lib /usr/lib/\$lib;done\n\tsysctl -w net.core.wmem_max=1048576 &> /dev/null\n\tsysctl -w net.core.rmem_max=4194304 &> /dev/null\n\tsysctl -w net.ipv4.tcp_adv_win_scale=4 &> /dev/null" $sdadir/service_transmission
 						ln -sf $sdadir/service_transmission /etc/init.d/transmission
 					}
@@ -657,8 +656,7 @@ sda_install_remove(){
 						[ "$?" = 0 ] && let adtagcount++
 					done
 				elif [ "$1" = "docker" ];then
-					[ "$(curl -m 2 -sko /dev/null -w "%{http_code}" google.tw)" != 404 ] && echo -e "$RED获取失败！为保证顺利安装 $YELLOW$1 $RED请先开启本机代理！$RESET" && sleep 1 && main
-					tag_name=$(curl -m 3 -sk https://download.docker.com/linux/static/stable/aarch64/ | grep docker-[0-9] | tail -1 | awk -F \> '{print $1}' | grep -oE '[0-9].*[0-9]')
+					[ "$(curl -m 2 -sko /dev/null -w "%{http_code}" https://registry-1.docker.io)" -eq 0 ] && echo -e "$RED获取失败！为保证顺利安装 $YELLOW$1 $RED请先开启本机代理！$RESET" && sleep 1 && main || tag_name=27.5.1
 				else
 					tag_name=$(curl -m 3 -sk "$tag_url" | grep tag_name | cut -f4 -d '"')
 				fi
@@ -672,7 +670,7 @@ sda_install_remove(){
 				[ "$1" != "docker" ] && echo -e "\n如果响应时间很短但获取失败，则是每小时内的请求次数已超过 ${PINK}github$RESET 限制，请更换 ${YELLOW}IP$RESET 或者等待一段时间后再试！"
 				sleep 1 && main
 			}
-			echo -e "$GREEN获取成功！$RESET当前最新版本：$PINK$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')$RESET" && sleep 2
+			echo -e "$GREEN获取成功！$RESET当前最新可用版本：$PINK$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')$RESET" && sleep 2
 			[ "$old_tag" ] && {
 				new_tag=$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')
 				[ "$old_tag" \> "$new_tag" -o "$old_tag" \= "$new_tag" ] && {
@@ -1059,12 +1057,12 @@ sda_install_remove(){
 		if [ "$(pidof $2)" ];then
 			{
 				echo -e "#!/bin/sh /etc/rc.common\n\nSTART=95"
-				[ "$autorestore" ] && echo -e "\nwhile [ \"\$(cat /proc/xiaoqiang/boot_status)\" != 3 ];do sleep 1;done\nln -sf $sdadir/service_$1 /etc/init.d/$1"
+				[ "$autorestore" ] && echo -e "\nwhile [ \"\$(cat /proc/xiaoqiang/boot_status)\" != 3 -o ! \"\$(curl -m 1 -w \"%{http_code}\" -so /dev/null baidu.com)\" = 200 ];do sleep 1;done\nln -sf $sdadir/service_$1 /etc/init.d/$1"
 				echo -e "\nstart() {\n\texistedpid=\$(ps | grep -v grep | grep $2 | awk '{print \$1}');for pid in \$existedpid;do [ \$pid != \$\$ ] && killpid \$pid;done"
 			} > $autostartfileinit
 			[ "$tmpdir" -a ! "$skipdownload" ] && {
 				echo -e "#!/bin/sh /etc/rc.common\n\nSTART=95\n\nMIRRORS=\"$(echo $MIRRORS)\"\n\ngithubdownload() {\n\tfor MIRROR in \$MIRRORS;do\n\t\trm -f \$1 && failedcount=0 && http_code=0 && dlurl=\$3 && [ \"\$(echo \$dlurl | grep -vE '/http|=http' | grep -E 'github.com/|githubusercontent.com/')\" ] && dlurl=\"\$(echo \$dlurl | sed \"s#.*#\$(echo \$MIRROR | sed 's/[^/]\$/&\\\//')&#\")\"\n\t\techo -e \"\\\n\\\e[1;33m下载\$2 \$SKYBLUE\$dlurl \\\e[1;33m······\\\e[0m \\\c\"\n\t\thttp_code=\$(curl -m 10 -sLko \$1 \"\$dlurl\" -w \"%{http_code}\")\n\t\twhile [ \$? != 0 -a \$failedcount -lt 3 -o \$http_code != 200 -a \$failedcount -lt 3 ];do\n\t\t\trm -f \$1 && echo -e \"\\\e[0;31m下载失败！即将尝试重新下载！已重试次数：\$failedcount\\\e[0m\" && sleep 1 && let failedcount++\n\t\t\techo -e \"\\\n\\\e[1;33m下载\$2 \$SKYBLUE\$dlurl \\\e[1;33m······\\\e[0m \\\c\" && http_code=\$(curl -m 10 -sLko \$1 \"\$dlurl\" -w \"%{http_code}\")\n\t\tdone\t\t\n\t\t[ \$? = 0 -a \$http_code = 200 ] && echo -e \"\\\e[1;32m下载成功！\\\e[0m\" && break && return 0\n\tdone\n\treturn 1\n}"
-				[ "$autorestore" ] && echo -e "\nwhile [ \"\$(cat /proc/xiaoqiang/boot_status)\" != 3 ];do sleep 1;done\n[ -f $sdadir/$2 ] && exit"
+				[ "$autorestore" ] && echo -e "\nwhile [ \"\$(cat /proc/xiaoqiang/boot_status)\" != 3 -o ! \"\$(curl -m 1 -w \"%{http_code}\" -so /dev/null baidu.com)\" = 200 ];do sleep 1;done\n[ -f $sdadir/$2 ] && exit"
 				echo -e "\nstart() {\n\tgithubdownload \"/tmp/$1.tmp\" \"$2\" \"$url\"\n\t[ -f /tmp/$1.tmp ] && {\n\t\t[ ! -d /tmp/XiaomiSimpleInstallBox ] && mkdir -p /tmp/XiaomiSimpleInstallBox"
 			} > $downloadfileinit
 			[ "$1" = "qBittorrent" ] && {
@@ -1241,7 +1239,7 @@ sda_install_remove(){
 				webui="/ariang"
 				{
 					echo -e "#!/bin/sh /etc/rc.common\n\nSTART=95"
-					[ "$autorestore" ] && echo -e "\nwhile [ \"\$(cat /proc/xiaoqiang/boot_status)\" != 3 ];do sleep 1;done\nln -sf $sdadir/service_$1 /etc/init.d/$1"
+					[ "$autorestore" ] && echo -e "\nwhile [ \"\$(cat /proc/xiaoqiang/boot_status)\" != 3 -o ! \"\$(curl -m 1 -w \"%{http_code}\" -so /dev/null baidu.com)\" = 200 ];do sleep 1;done\nln -sf $sdadir/service_$1 /etc/init.d/$1"
 					echo -e "\nstart() {"
 				} > $autostartfileinit
 				newdefineport=8888 && while [ "$(netstat -lnWp | grep tcp | grep ":$newdefineport " | awk '{print $NF}' | sed 's/.*\///' | head -1)" ];do let newdefineport++;sleep 1;done
