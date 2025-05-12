@@ -1,4 +1,4 @@
-version=v1.0.7z
+version=v1.0.8
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=false
 export PATH=/data/unzip:$PATH
 hardware_release=$(cat /etc/openwrt_release 2> /dev/null | grep RELEASE | grep -oE [.0-9]{1,10})
@@ -12,7 +12,7 @@ MIRRORS="
 https://ghproxy.net/
 https://gh-proxy.com/
 https://github.moeyy.xyz/
-https://mirror.ghproxy.com/
+https://ghfast.top/
 "
 log(){
 	echo "[ $(date '+%F %T') ] $1" >> ${0%/*}/XiaomiSimpleInstallBox.log
@@ -448,13 +448,13 @@ sdadir_available_check(){
 }
 github_download(){
 	for MIRROR in $MIRRORS;do
-		echo -e "\n尝试使用加速镜像 $SKYBLUE$MIRROR$RESET 下载"
-		http_code=$(curl --connect-timeout 3 -m 20 -w "%{http_code}" -#Lko /tmp/$1 "$MIRROR$2")
+		[ ! "$3" ] && echo -e "\n尝试使用加速镜像 $SKYBLUE$MIRROR$RESET 下载" && Progress="#" || Progress="s"
+		http_code=$(curl --connect-timeout 3 -m 20 -w "%{http_code}" -${Progress}Lko /tmp/$1 "$MIRROR$2")
 		if [ $? = 0 -a $http_code = 200 ];then
 			break
 		else
 			rm -f /tmp/$1
-			echo -e "\n$RED下载失败！$RESET即将尝试使用下一个加速镜像进行尝试 ······" && sleep 2
+			[ ! "$3" ] && echo -e "\n$RED下载失败！$RESET即将尝试使用下一个加速镜像进行尝试 ······" && sleep 2
 		fi
 	done
 	[ -f /tmp/$1 ] && return 0 || return 1
@@ -645,20 +645,15 @@ sda_install_remove(){
 		}
 		[ "$upxretry" -eq 0 ] && {
 			urls="https://github.com/$5/$6/releases/latest"
-			tag_url="https://api.github.com/repos/$5/$6/releases/latest"
 			echo -e "\n即将获取 ${YELLOW}$1$RESET 最新版本号并下载" && sleep 2 && rm -f /tmp/$1.tmp && retry_count=5 && tag_name=""
 			while [ ! "$tag_name" -a $retry_count != 0 ];do
-				echo -e "\n正在获取最新 ${YELLOW}$1$RESET 版本号 ······ \c" && adtagcount=0
-				if [ "$1" = "AdGuardHome" ];then
-					while [ ! "$(echo $tag_name | grep '\-b')" -a $adtagcount -le 5 ];do
-						tag_url="https://api.github.com/repos/$5/$6/releases?per_page=1&page=$adtagcount"
-						tag_name=$(curl -m 3 -sk "$tag_url" | grep tag_name | cut -f4 -d '"')
-						[ "$?" = 0 ] && let adtagcount++
-					done
-				elif [ "$1" = "docker" ];then
+				echo -e "\n正在获取最新 ${YELLOW}$1$RESET 版本号 ······ \c"
+				if [ "$1" = "docker" ];then
 					[ "$(curl -m 2 -sko /dev/null -w "%{http_code}" https://registry-1.docker.io)" -eq 0 ] && echo -e "$RED获取失败！为保证顺利安装 $YELLOW$1 $RED请先开启本机代理！$RESET" && sleep 1 && main || tag_name=27.5.1
 				else
-					tag_name=$(curl -m 3 -sk "$tag_url" | grep tag_name | cut -f4 -d '"')
+					github_download "XiaomiSimpleInstallBox.Versions" "https://github.com/xilaochengv/BuildKernelSU/releases/download/Latest/Versions" "Versions"
+					tag_name=$(cat /tmp/XiaomiSimpleInstallBox.Versions 2> /dev/null | grep "$1" | awk '{print $2}')
+					rm -f /tmp/XiaomiSimpleInstallBox.Versions
 				fi
 				[ ! "$tag_name" ] && {
 					let retry_count--
@@ -666,15 +661,14 @@ sda_install_remove(){
 				}
 			done
 			[ ! "$tag_name" ] && {
-				echo -e "$RED获取失败！\n\n获取版本号失败！$RESET如果没有代理的话建议多尝试几次！"
-				[ "$1" != "docker" ] && echo -e "\n如果响应时间很短但获取失败，则是每小时内的请求次数已超过 ${PINK}github$RESET 限制，请更换 ${YELLOW}IP$RESET 或者等待一段时间后再试！"
+				echo -e "$RED获取失败！\n\n获取版本号失败！$RESET"
 				sleep 1 && main
 			}
 			echo -e "$GREEN获取成功！$RESET当前最新可用版本：$PINK$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')$RESET" && sleep 2
 			[ "$old_tag" ] && {
 				new_tag=$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')
 				[ "$old_tag" \> "$new_tag" -o "$old_tag" \= "$new_tag" ] && {
-				echo -e "\n当前已安装最新版 $YELLOW$1 $PINK$(echo $tag_name | sed 's/^[^v].*[^.0-9]/v/')$RESET ，无需更新！$RESET" && sleep 2
+				echo -e "\n当前已安装最新版 $YELLOW$1 $PINK$old_tag$RESET ，无需更新！$RESET" && sleep 2
 				echo -e "\n$PINK是否重新下载？$RESET" && downloadnum=""
 				echo "---------------------------------------------------------"
 				echo "1. 重新下载"
@@ -1061,7 +1055,7 @@ sda_install_remove(){
 				echo -e "\nstart() {\n\texistedpid=\$(ps | grep -v grep | grep $2 | awk '{print \$1}');for pid in \$existedpid;do [ \$pid != \$\$ ] && killpid \$pid;done"
 			} > $autostartfileinit
 			[ "$tmpdir" -a ! "$skipdownload" ] && {
-				echo -e "#!/bin/sh /etc/rc.common\n\nSTART=95\n\nwhile [ \"\$(cat /proc/xiaoqiang/boot_status)\" != 3 -o ! \"\$(curl -m 1 -w \"%{http_code}\" -so /dev/null baidu.com)\" = 200 ];do sleep 1;done\n\nMIRRORS=\"$(echo $MIRRORS)\"\n\ngithubdownload() {\n\tfor MIRROR in \$MIRRORS;do\n\t\trm -f \$1 && failedcount=0 && http_code=0 && dlurl=\$3 && [ \"\$(echo \$dlurl | grep -vE '/http|=http' | grep -E 'github.com/|githubusercontent.com/')\" ] && dlurl=\"\$(echo \$dlurl | sed \"s#.*#\$(echo \$MIRROR | sed 's/[^/]\$/&\\\//')&#\")\"\n\t\techo -e \"\\\n\\\e[1;33m下载\$2 \$SKYBLUE\$dlurl \\\e[1;33m······\\\e[0m \\\c\"\n\t\thttp_code=\$(curl -m 10 -sLko \$1 \"\$dlurl\" -w \"%{http_code}\")\n\t\twhile [ \$? != 0 -a \$failedcount -lt 3 -o \$http_code != 200 -a \$failedcount -lt 3 ];do\n\t\t\trm -f \$1 && echo -e \"\\\e[0;31m下载失败！即将尝试重新下载！已重试次数：\$failedcount\\\e[0m\" && sleep 1 && let failedcount++\n\t\t\techo -e \"\\\n\\\e[1;33m下载\$2 \$SKYBLUE\$dlurl \\\e[1;33m······\\\e[0m \\\c\" && http_code=\$(curl -m 10 -sLko \$1 \"\$dlurl\" -w \"%{http_code}\")\n\t\tdone\t\t\n\t\t[ \$? = 0 -a \$http_code = 200 ] && echo -e \"\\\e[1;32m下载成功！\\\e[0m\" && break && return 0\n\tdone\n\treturn 1\n}"
+				echo -e "#!/bin/sh /etc/rc.common\n\nSTART=95\n\nwhile [ \"\$(cat /proc/xiaoqiang/boot_status)\" != 3 -o ! \"\$(curl -m 1 -w \"%{http_code}\" -so /dev/null baidu.com)\" = 200 ];do sleep 1;done\n\nMIRRORS=\"$(echo $MIRRORS)\"\n\ngithubdownload() {\n\tfor MIRROR in \$MIRRORS;do\n\t\trm -f \$1 && failedcount=0 && http_code=0 && dlurl=\$3 && [ \"\$(echo \$dlurl | grep -vE '/http|=http' | grep -E 'github.com/|githubusercontent.com/')\" ] && dlurl=\"\$(echo \$dlurl | sed \"s#.*#\$(echo \$MIRROR | sed 's/[^/]\$/&\\\//')&#\")\"\n\t\techo -e \"\\\n\\\e[1;33m下载\$2 \$SKYBLUE\$dlurl \\\e[1;33m······\\\e[0m \\\c\"\n\t\thttp_code=\$(curl -m 10 -sLko \$1 \"\$dlurl\" -w \"%{http_code}\")\n\t\twhile [ \$? != 0 -a \$failedcount -lt 3 -o \$http_code != 200 -a \$failedcount -lt 3 ];do\n\t\t\trm -f \$1 && echo -e \"\\\e[0;31m下载失败！即将尝试重新下载！已重试次数：\$failedcount\\\e[0m\" && sleep 1 && let failedcount++\n\t\t\t[ \$failedcount -lt 3 ] && echo -e \"\\\n\\\e[1;33m下载\$2 \$SKYBLUE\$dlurl \\\e[1;33m······\\\e[0m \\\c\" && http_code=\$(curl -m 10 -sLko \$1 \"\$dlurl\" -w \"%{http_code}\")\n\t\tdone\t\t\n\t\t[ \$? = 0 -a \$http_code = 200 ] && echo -e \"\\\e[1;32m下载成功！\\\e[0m\" && return 0\n\tdone\n\techo -e \"\\\e[0;31m\\\n下载失败！\\\e[0m\" && return 1\n}"
 				[ "$autorestore" ] && echo -e "\nwhile [ \"\$(cat /proc/xiaoqiang/boot_status)\" != 3 -o ! \"\$(curl -m 1 -w \"%{http_code}\" -so /dev/null baidu.com)\" = 200 ];do sleep 1;done\n[ -f $sdadir/$2 ] && exit"
 				echo -e "\nstart() {\n\tgithubdownload \"/tmp/$1.tmp\" \"$2\" \"$url\"\n\t[ -f /tmp/$1.tmp ] && {\n\t\t[ ! -d /tmp/XiaomiSimpleInstallBox ] && mkdir -p /tmp/XiaomiSimpleInstallBox"
 			} > $downloadfileinit
@@ -1138,7 +1132,7 @@ sda_install_remove(){
 			ln -sf $autostartfileinit $autostartfilerc && chmod 755 $autostartfilerc && cp -pf $autostartfileinit $sdadir/service_$1 && $autostartfileinit restart &> /dev/null
 			[ "$autorestore" ] && sed -i "/$1/d;/exit 0/i$sdadir/service_$1 restart &" /data/start_service_by_firewall
 			[ "$tmpdir" -a ! "$skipdownload" ] && {
-				echo -e "\t\trm -f /tmp/$1.tmp\n\t\tchmod 755 /tmp/XiaomiSimpleInstallBox/$2\n\t\t$sdadir/service_$1 start &> /dev/null &\n\t}\n}" >> $downloadfileinit && chmod 755 $downloadfileinit && log "新建自启动文件$downloadfileinit"
+				echo -e "\t\trm -f /tmp/$1.tmp\n\t\tchmod 755 /tmp/XiaomiSimpleInstallBox/$2\n\t\t$sdadir/service_$1 restart &> /dev/null &\n\t}\n}" >> $downloadfileinit && chmod 755 $downloadfileinit && log "新建自启动文件$downloadfileinit"
 				ln -sf $downloadfileinit $downloadfilerc && chmod 755 $downloadfilerc && cp -pf $downloadfileinit $sdadir/service_Download$1 && /etc/init.d/$1 disable
 			}
 			[ "$autorestore" ] && [ "$tmpdir" ] && sed -i "/$1/d;/exit 0/i$sdadir/service_Download$1 start &" /data/start_service_by_firewall
