@@ -2,7 +2,7 @@ name: 获取各插件最新版本号
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "0,30 * * * *"
 jobs:
   build:
     name: 获取各插件最新版本号
