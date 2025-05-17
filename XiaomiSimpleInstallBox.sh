@@ -1,5 +1,5 @@
-version=v1.0.8
-RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=false
+version=v1.0.8a
+RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=true
 export PATH=/data/unzip:$PATH
 hardware_release=$(cat /etc/openwrt_release 2> /dev/null | grep RELEASE | grep -oE [.0-9]{1,10})
 hardware_target=$(cat /etc/openwrt_release 2> /dev/null | grep TARGET | awk -F / '{print $2}' | sed 's/_.*//')
@@ -498,7 +498,7 @@ firewalllog(){
 	return 0
 }
 sda_install_remove(){
-	sdalist=$(df | sed -n '1!p' | grep -vE "rom|tmp|ini|overlay|sys|lib|docker_disk" | awk '{print $6}' | grep -vE '^/$|/userdisk/|/data/|/etc/')
+	sdalist=$(df | sed -n '1!p' | grep -vE "rom|tmp|ini|overlay|etc|sys|lib|docker_disk" | awk '{print $6}' | grep -vE '^/$|/userdisk/')
 	autostartfileinit=/etc/init.d/$1 && autostartfilerc=/etc/rc.d/S95$1 && downloadfileinit=/etc/init.d/Download$1 && downloadfilerc=/etc/rc.d/S95Download$1 && tmpdir="" && old_tag="" && upxretry=0 && skipdownload="" && newuser="" && DNSINFO="" && ruleexist=""
 	[ "$3" = "del" ] && del="true" || del=""
 	[ ! "$del" ] && {
