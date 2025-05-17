@@ -498,7 +498,7 @@ firewalllog(){
 	return 0
 }
 sda_install_remove(){
-	sdalist=$(df | sed -n '1!p' | grep -vE "rom|tmp|ini|overlay|etc|sys|lib|docker_disk" | awk '{print $6}' | grep -vE '^/$|/userdisk/')
+	sdalist=$(df | sed -n '1!p' | grep -vE "rootfs|rom|tmp|ini|overlay|etc|sys|lib|docker_disk" | awk '{print $6}' | grep -vE '^/$|/userdisk/')
 	autostartfileinit=/etc/init.d/$1 && autostartfilerc=/etc/rc.d/S95$1 && downloadfileinit=/etc/init.d/Download$1 && downloadfilerc=/etc/rc.d/S95Download$1 && tmpdir="" && old_tag="" && upxretry=0 && skipdownload="" && newuser="" && DNSINFO="" && ruleexist=""
 	[ "$3" = "del" ] && del="true" || del=""
 	[ ! "$del" ] && {
