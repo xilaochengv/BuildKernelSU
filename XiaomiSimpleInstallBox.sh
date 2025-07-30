@@ -1,4 +1,4 @@
-version=v1.0.8b
+version=v1.0.8c
 RED='\e[0;31m';GREEN='\e[1;32m';YELLOW='\e[1;33m';BLUE='\e[1;34m';PINK='\e[1;35m';SKYBLUE='\e[1;36m';UNDERLINE='\e[4m';BLINK='\e[5m';RESET='\e[0m';changlogshowed=true
 export PATH=/data/unzip:$PATH
 hardware_release=$(cat /etc/openwrt_release 2> /dev/null | grep RELEASE | grep -oE [.0-9]{1,10})
@@ -452,15 +452,16 @@ github_download(){
 		[ ! "$3" ] && echo -en "\n尝试使用加速镜像 $SKYBLUE$MIRROR$RESET 下载"
 		size=$(curl -m 10 -skIL "$MIRROR$2" | grep content-length | tail -1 | awk '{print $2}') && rm -f /tmp/XiaomiSimpleInstallBox_http_code
 		[ "$size" -a ! "$3" ] && {
-			echo -n "： - 0%"
+			echo -en "\n\n#_________________________________________________ 0%"
 			Progress_size=$((size/50)) && OldProgress=0
 			until [ "$(cat /tmp/XiaomiSimpleInstallBox_http_code 2> /dev/null)" ];do
 				sleep 1 && [ -f /tmp/$1 ] && NowProgress=$(($(ls -l /tmp/$1 2> /dev/null | awk '{print $5}')/Progress_size*2))
 				[ "$NowProgress" ] && [ $NowProgress -gt 0 ] && [ "$NowProgress" != "$OldProgress" ] && {
-					[ $NowProgress -gt 9 ] && back="\b\b\b\b";[ $OldProgress -le 9 ] && back="\b\b\b";echo -en "$back"
-					awk BEGIN'{for(i='$OldProgress';i<'$NowProgress';i++)if(i%2==1)printf "-"}' && [ "$NowProgress" = "100" ] && echo -n " 99%" || echo -n " $NowProgress%"
+					[ $NowProgress -gt 9 ] && back="\b\b\b\b";[ $OldProgress -le 9 ] && back="\b\b\b";echo -en "$back" && back=""
+					backcount=100 && while [ $backcount -gt $OldProgress ];do let backcount--;[ $((backcount%2)) = 1 ] && back="$back\b";done;echo -en "$back"
+					awk BEGIN'{for(i='$OldProgress';i<'$NowProgress';i++)if(i%2==1)printf "#"}' && awk BEGIN'{for(i='$NowProgress';i<100;i++)if(i%2==1)printf "_"}' && [ "$NowProgress" = "100" ] && echo -n " 99%" || echo -n " $NowProgress%"
+					OldProgress=$NowProgress
 				}
-				OldProgress=$NowProgress
 			done
 			[ -f /tmp/$1 -a "$(ls -l /tmp/$1 2> /dev/null | awk '{print $5}')" = "$size" ] && echo -e "\b\b\b100%" || echo -n " "
 		} & curl --connect-timeout 3 -m 20 -sLko /tmp/$1 "$MIRROR$2";echo done > /tmp/XiaomiSimpleInstallBox_http_code
@@ -470,8 +471,8 @@ github_download(){
 		else
 			rm -f /tmp/$1
 			[ ! "$3" ] && {
-				[ "$size" ] || echo -n "： - 0% "
-				echo -e "$RED下载失败！$RESET即将尝试使用下一个加速镜像进行尝试 ······" && sleep 2
+				[ "$size" ] || echo -en "\n\n#_________________________________________________ 0% "
+				[ ! "$MIRROR" = "$(echo $MIRRORS | awk '{print $NF}')" ] && echo -e "$RED下载失败！$RESET即将尝试使用下一个加速镜像进行尝试 ······" && sleep 2
 			}
 		fi
 	done
@@ -671,6 +672,7 @@ sda_install_remove(){
 				else
 					github_download "XiaomiSimpleInstallBox.Versions" "https://github.com/xilaochengv/BuildKernelSU/releases/download/Latest/Versions" "Versions"
 					tag_name=$(cat /tmp/XiaomiSimpleInstallBox.Versions 2> /dev/null | grep "$1" | awk '{print $2}')
+					#tag_name='release-4.6.7.10'
 					rm -f /tmp/XiaomiSimpleInstallBox.Versions
 				fi
 				[ ! "$tag_name" ] && {
@@ -806,7 +808,7 @@ sda_install_remove(){
 						[ "$hardware_type" = "arm" ] && eabi="eabi"
 						[ "$1" = "zerotier" ] && [ "$hardware_type" = "amd64" ] && hardware_type=arm && eabi="eabihf"
 						[ "${hardware_type:0:4}" = "mips" ] && softfloat="_softfloat"
-						[ "$1" = "qBittorrent" ] && url="https://github.com/c0re100/qBittorrent-Enhanced-Edition/releases/download/$tag_name/qbittorrent-enhanced-nox_$hardware_type-linux-musl${eabi}_static.zip"
+						[ "$1" = "qBittorrent" ] && url="https://github.com/$5/$6/releases/download/$tag_name/qbittorrent-enhanced-nox_$hardware_type-linux-musl${eabi}_static.zip"
 						[ "$1" = "Alist" ] && url="https://github.com/$5/$6/releases/download/$tag_name/alist-linux-musl$eabi-$hardware_type.tar.gz"
 						[ "$1" = "AdGuardHome" ] && url="https://github.com/$5/$6/releases/download/$tag_name/AdGuardHome_linux_$hardware_type$softfloat.tar.gz"
 						[ "$1" = "zerotier" ] && url="https://github.com/$5/$6/releases/download/$tag_name/zerotier-one-$hardware_type-linux-musl$eabi.zip"
@@ -817,12 +819,12 @@ sda_install_remove(){
 						fi
 						if [ "$?" != 0 ];then
 							rm -f /tmp/$1.tmp && let retry_count--
-							[ $retry_count != 0 ] && echo -e "\n$RED下载失败！$RESET即将尝试重连······（剩余重试次数：$PINK$retry_count$RESET）" && sleep 1
+							[ $retry_count != 0 ] && echo -e "$RED下载失败！$RESET即将尝试重连······（剩余重试次数：$PINK$retry_count$RESET）" && sleep 1
 						else
-							[ "$(wc -c < /tmp/$1.tmp)" -lt 1024 ] && rm -f /tmp/$1.tmp && echo -e "\n$RED下载失败！$RESET没有找到适用于当前系统的文件包，请手动选择型号进行重试！" && sleep 1 && main
+							[ "$(wc -c < /tmp/$1.tmp)" -lt 1024 ] && rm -f /tmp/$1.tmp && echo -e "$RED下载失败！$RESET没有找到适用于当前系统的文件包，请手动选择型号进行重试！" && sleep 1 && main
 						fi
 					done
-					[ ! -f /tmp/$1.tmp ] && echo -e "\n$RED下载失败！$RESET如果没有代理的话建议多尝试几次！" && sleep 1 && main
+					[ ! -f /tmp/$1.tmp ] && echo -e "$RED下载失败！$RESET如果没有代理的话建议多尝试几次！" && sleep 1 && main
 					echo -e "\n$GREEN下载成功！$RESET即将解压安装并启动" && rm -f /tmp/$2 && sleep 2
 					case "$1" in
 						qBittorrent)	unzip -oq /tmp/$1.tmp -d /tmp;;
